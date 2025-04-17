@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  TextInput, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -16,10 +16,10 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
-import { 
-  ArrowLeft, 
-  Send, 
-  Image as ImageIcon, 
+import {
+  ArrowLeft,
+  Send,
+  Image as ImageIcon,
   Info,
   X
 } from 'lucide-react-native';
@@ -35,41 +35,41 @@ export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuthStore();
-  const { 
+  const {
     chats,
     messages,
-    fetchChatById, 
+    fetchChatById,
     fetchMessages,
-    sendMessage, 
+    sendMessage,
     markChatAsRead,
-    isLoading, 
-    error 
+    isLoading,
+    error
   } = useChatStore();
-  
+
   const [message, setMessage] = useState('');
   const [chat, setChat] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
-  
+
   // Track if initial fetch has been done
   const initialFetchDoneRef = useRef(false);
   const markAsReadDoneRef = useRef(false);
-  
+
   useEffect(() => {
     if (id) {
       // Find chat in the store
       const chatData = chats.find(c => c.id === id);
       if (chatData) {
         setChat(chatData);
-        
+
         // Only fetch messages if we haven't already or if they're not in the store
         if (!initialFetchDoneRef.current && (!messages[id] || messages[id].length === 0)) {
           fetchMessages(id);
           initialFetchDoneRef.current = true;
         }
-        
+
         // Mark chat as read when entering
         if (!markAsReadDoneRef.current && chatData.unreadCount > 0) {
           markChatAsRead(id);
@@ -80,7 +80,7 @@ export default function ChatScreen() {
       }
     }
   }, [id, chats]);
-  
+
   // Update chat when messages change
   useEffect(() => {
     if (id && messages[id] && chat) {
@@ -90,22 +90,22 @@ export default function ChatScreen() {
       });
     }
   }, [id, messages]);
-  
+
   const handleSend = async () => {
     if ((!message.trim() && !selectedImage) || !user || !chat) return;
-    
+
     const messageData = {
       content: message.trim(),
       chatId: chat.id,
       images: selectedImage ? [selectedImage] : undefined
     };
-    
+
     try {
       setIsSending(true);
       await sendMessage(messageData);
       setMessage('');
       setSelectedImage(null);
-      
+
       // Scroll to bottom after sending
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -117,27 +117,27 @@ export default function ChatScreen() {
       setIsSending(false);
     }
   };
-  
+
   const handleBack = () => {
     router.back();
   };
-  
+
   const handleChatInfo = () => {
     if (chat) {
       router.push(`/chat/info/${chat.id}`);
     }
   };
-  
+
   const handleImageUpload = async () => {
     try {
       // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
         return;
       }
-      
+
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -145,7 +145,7 @@ export default function ChatScreen() {
         aspect: [4, 3],
         quality: 0.8,
       });
-      
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setSelectedImage(result.assets[0].uri);
       }
@@ -154,7 +154,7 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   };
-  
+
   const handleRemoveImage = () => {
     setSelectedImage(null);
   };
@@ -166,7 +166,7 @@ export default function ChatScreen() {
   const closeImageViewer = () => {
     setViewingImage(null);
   };
-  
+
   // Only show loading indicator when initially loading the chat, not when sending messages
   if (isLoading && !chat) {
     return (
@@ -175,7 +175,7 @@ export default function ChatScreen() {
       </SafeAreaView>
     );
   }
-  
+
   if (error) {
     return (
       <SafeAreaView style={styles.errorContainer}>
@@ -186,7 +186,7 @@ export default function ChatScreen() {
       </SafeAreaView>
     );
   }
-  
+
   if (!chat) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -194,25 +194,25 @@ export default function ChatScreen() {
       </SafeAreaView>
     );
   }
-  
+
   const otherUser = chat.participants.find((p: any) => p.id !== user?.id);
   const chatMessages = messages[chat.id] || [];
-  
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <StatusBar style="dark" />
-      
-      <Stack.Screen 
+
+      <Stack.Screen
         options={{
           headerTitle: () => (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerTitle}
               onPress={handleChatInfo}
             >
-              <Avatar 
-                source={otherUser?.avatar} 
-                name={otherUser?.displayName || ""} 
-                size="small" 
+              <Avatar
+                source={otherUser?.avatar}
+                name={otherUser?.displayName || ""}
+                size="small"
               />
               <View style={styles.headerTitleText}>
                 <Text style={styles.headerName}>{otherUser?.displayName}</Text>
@@ -234,7 +234,7 @@ export default function ChatScreen() {
           ),
         }}
       />
-      
+
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -263,11 +263,11 @@ export default function ChatScreen() {
           // This ensures the list updates when messages change
           extraData={chatMessages.length}
         />
-        
+
         {selectedImage && (
           <View style={styles.selectedImageContainer}>
             <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.removeImageButton}
               onPress={handleRemoveImage}
             >
@@ -275,7 +275,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
           </View>
         )}
-        
+
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
@@ -287,9 +287,9 @@ export default function ChatScreen() {
             maxLength={500}
             onSubmitEditing={handleSend}
           />
-          
+
           {message.trim() || selectedImage ? (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.sendButton}
               onPress={handleSend}
               disabled={isSending}
@@ -301,7 +301,7 @@ export default function ChatScreen() {
               )}
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.mediaButton}
               onPress={handleImageUpload}
             >
@@ -313,10 +313,10 @@ export default function ChatScreen() {
 
       {/* Image Viewer Modal */}
       {viewingImage && (
-        <ImageViewer 
-          imageUrl={viewingImage} 
-          visible={!!viewingImage} 
-          onClose={closeImageViewer} 
+        <ImageViewer
+          imageUrl={viewingImage}
+          visible={!!viewingImage}
+          onClose={closeImageViewer}
         />
       )}
     </SafeAreaView>
@@ -389,11 +389,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
-    height: 150,
+    height: 200,  // 增加高度以显示更多内容
+    backgroundColor: '#f0f0f0', // 添加背景色以便于区分
   },
   selectedImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'contain', // 改为contain模式以保持纵横比并完整显示图片
   },
   removeImageButton: {
     position: 'absolute',
