@@ -5,7 +5,7 @@ import { useLanguageStore } from '@/store/language-store';
 
 export default function AuthLayout() {
   const { translate } = useLanguageStore();
-  
+
   return (
     <Stack
       screenOptions={{
@@ -27,6 +27,7 @@ export default function AuthLayout() {
         name="login"
         options={{
           title: translate('login'),
+          headerBackVisible: false, // 禁用返回按钮
         }}
       />
       <Stack.Screen
@@ -39,6 +40,13 @@ export default function AuthLayout() {
         name="forgot-password"
         options={{
           title: translate('forgotPassword'),
+        }}
+      />
+      <Stack.Screen
+        name="verify-email"
+        options={{
+          title: "Verify Email",
+          headerShown: false, // Hide the header for this screen
         }}
       />
     </Stack>

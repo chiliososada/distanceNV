@@ -60,18 +60,18 @@ export const useAuthStore = create<AuthStore>()(
           // For demo, we'll just check if we have a user
           const state = get();
           const isValid = !!state.user && !!state.token;
-          
+
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          set({ 
+
+          set({
             isAuthenticated: isValid,
             isInitializing: false
           });
         } catch (error) {
           console.error("Auth initialization error:", error);
-          set({ 
-            isAuthenticated: false, 
+          set({
+            isAuthenticated: false,
             isInitializing: false,
             error: "Failed to initialize authentication"
           });
@@ -83,11 +83,11 @@ export const useAuthStore = create<AuthStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1500));
-          
+
           // In a real app, we would validate credentials with the server
           if (credentials.email === 'john@example.com' && credentials.password === 'password') {
-            set({ 
-              user: mockUser, 
+            set({
+              user: mockUser,
               isAuthenticated: true,
               token: 'mock-jwt-token',
               isLoading: false
@@ -105,21 +105,13 @@ export const useAuthStore = create<AuthStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 2000));
-          
+
           // In a real app, we would send registration data to the server
-          const newUser: User = {
-            ...mockUser,
-            email: data.email,
-            username: data.username,
-            displayName: data.displayName,
-          };
-          
-          set({ 
-            user: newUser, 
-            isAuthenticated: true,
-            token: 'mock-jwt-token',
+
+          set({
             isLoading: false
           });
+          // 不返回任何值
         } catch (error) {
           set({ error: 'Registration failed. Please try again.', isLoading: false });
         }
@@ -127,8 +119,8 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         // Clear all auth state
-        set({ 
-          user: null, 
+        set({
+          user: null,
           isAuthenticated: false,
           token: null,
           isLoading: false,
@@ -141,20 +133,20 @@ export const useAuthStore = create<AuthStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           const currentUser = get().user;
-          
+
           if (!currentUser) {
             set({ error: 'Not authenticated', isLoading: false });
             return;
           }
-          
+
           const updatedUser = {
             ...currentUser,
             ...data,
             updatedAt: new Date().toISOString(),
           };
-          
+
           set({ user: updatedUser, isLoading: false });
         } catch (error) {
           set({ error: 'Failed to update profile. Please try again.', isLoading: false });
@@ -166,13 +158,13 @@ export const useAuthStore = create<AuthStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           // In a real app, we would validate the old password and update to the new one
           if (oldPassword !== 'password') {
             set({ error: 'Current password is incorrect', isLoading: false });
             return;
           }
-          
+
           // Password changed successfully
           set({ isLoading: false });
         } catch (error) {

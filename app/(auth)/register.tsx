@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  KeyboardAvoidingView, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert
@@ -12,7 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Mail, Lock, User, ArrowLeft, ArrowRight } from 'lucide-react-native';
+import { Mail, Lock, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react-native';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { colors } from '@/constants/colors';
@@ -21,29 +21,100 @@ import { useAuthStore } from '@/store/auth-store';
 export default function RegisterScreen() {
   const router = useRouter();
   const { register, isLoading, error } = useAuthStore();
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Validation states
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+
+  // Email validation
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) {
+      setEmailError('Email is required');
+      return false;
+    } else if (!emailRegex.test(email)) {
+      setEmailError('Please enter a valid email address');
+      return false;
+    } else {
+      setEmailError('');
+      return true;
+    }
+  };
+
+  // Password validation
+  const validatePassword = (password: string) => {
+    if (!password) {
+      setPasswordError('Password is required');
+      return false;
+    } else if (password.length < 8) {
+      setPasswordError('Password must be at least 8 characters long');
+      return false;
+    } else if (!/[A-Z]/.test(password)) {
+      setPasswordError('Password must contain at least one uppercase letter');
+      return false;
+    } else if (!/[0-9]/.test(password)) {
+      setPasswordError('Password must contain at least one number');
+      return false;
+    } else if (!/[!@#$%^&*]/.test(password)) {
+      setPasswordError('Password must contain at least one special character (!@#$%^&*)');
+      return false;
+    } else {
+      setPasswordError('');
+      return true;
+    }
+  };
+
+  // Confirm password validation
+  const validateConfirmPassword = (confirmPwd: string) => {
+    if (!confirmPwd) {
+      setConfirmPasswordError('Please confirm your password');
+      return false;
+    } else if (confirmPwd !== password) {
+      setConfirmPasswordError('Passwords do not match');
+      return false;
+    } else {
+      setConfirmPasswordError('');
+      return true;
+    }
+  };
+
   const handleRegister = async () => {
-    if (!email || !password || !username || !displayName) {
-      Alert.alert('Error', 'Please fill in all fields');
+    // Validate all fields
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+    const isConfirmPasswordValid = validateConfirmPassword(confirmPassword);
+
+    if (!isEmailValid || !isPasswordValid || !isConfirmPasswordValid) {
       return;
     }
-    
+
     try {
-      await register({ email, password, username, displayName });
+      // In a real app, you would send the data to your backend
+      // Here we're just using the mock register function
+      await register({
+        email,
+        password
+      });
+
+      // 修复的路由导航
+      router.push({
+        pathname: '/(auth)/verify-email',
+        params: { email }
+      });
     } catch (error) {
       console.error('Registration error:', error);
     }
   };
-  
-  const handleBack = () => {
-    router.back();
-  };
-  
+
+  // const handleBack = () => {
+  //   router.back();
+  // };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
@@ -52,65 +123,126 @@ export default function RegisterScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity 
-            onPress={handleBack}
-            style={styles.backButton}
-          >
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
-          
+
           <View style={styles.header}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join DistanceApp to connect with people nearby</Text>
+            <Text style={styles.title}>创建账户</Text>
+            <Text style={styles.subtitle}>注册以连接社区</Text>
           </View>
-          
+
           <View style={styles.form}>
             <Input
-              label="Email"
-              placeholder="Enter your email"
+              label="电子邮箱"
+              placeholder="输入您的电子邮箱"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                validateEmail(text);
+              }}
+              onBlur={() => validateEmail(email)}
               keyboardType="email-address"
               autoCapitalize="none"
               leftIcon={<Mail size={20} color={colors.textSecondary} />}
+              error={emailError}
             />
-            
+
             <Input
-              label="Username"
-              placeholder="Choose a username"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              leftIcon={<User size={20} color={colors.textSecondary} />}
-            />
-            
-            <Input
-              label="Display Name"
-              placeholder="Your full name"
-              value={displayName}
-              onChangeText={setDisplayName}
-              leftIcon={<User size={20} color={colors.textSecondary} />}
-            />
-            
-            <Input
-              label="Password"
-              placeholder="Create a password"
+              label="密码"
+              placeholder="创建密码"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                validatePassword(text);
+                if (confirmPassword) {
+                  validateConfirmPassword(confirmPassword);
+                }
+              }}
+              onBlur={() => validatePassword(password)}
               isPassword
               leftIcon={<Lock size={20} color={colors.textSecondary} />}
+              error={passwordError}
             />
-            
+
+            <Input
+              label="确认密码"
+              placeholder="确认您的密码"
+              value={confirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                validateConfirmPassword(text);
+              }}
+              onBlur={() => validateConfirmPassword(confirmPassword)}
+              isPassword
+              leftIcon={<Lock size={20} color={colors.textSecondary} />}
+              error={confirmPasswordError}
+            />
+
+            {/* Password requirements section */}
+            <View style={styles.passwordRequirements}>
+              <Text style={styles.requirementsTitle}>密码必须包含：</Text>
+              <View style={styles.requirement}>
+                {password.length >= 8 ? (
+                  <CheckCircle size={16} color={colors.success} />
+                ) : (
+                  <XCircle size={16} color={colors.textSecondary} />
+                )}
+                <Text style={[
+                  styles.requirementText,
+                  password.length >= 8 && styles.requirementMet
+                ]}>
+                  至少8个字符
+                </Text>
+              </View>
+              <View style={styles.requirement}>
+                {/[A-Z]/.test(password) ? (
+                  <CheckCircle size={16} color={colors.success} />
+                ) : (
+                  <XCircle size={16} color={colors.textSecondary} />
+                )}
+                <Text style={[
+                  styles.requirementText,
+                  /[A-Z]/.test(password) && styles.requirementMet
+                ]}>
+                  至少一个大写字母
+                </Text>
+              </View>
+              <View style={styles.requirement}>
+                {/[0-9]/.test(password) ? (
+                  <CheckCircle size={16} color={colors.success} />
+                ) : (
+                  <XCircle size={16} color={colors.textSecondary} />
+                )}
+                <Text style={[
+                  styles.requirementText,
+                  /[0-9]/.test(password) && styles.requirementMet
+                ]}>
+                  至少一个数字
+                </Text>
+              </View>
+              <View style={styles.requirement}>
+                {/[!@#$%^&*]/.test(password) ? (
+                  <CheckCircle size={16} color={colors.success} />
+                ) : (
+                  <XCircle size={16} color={colors.textSecondary} />
+                )}
+                <Text style={[
+                  styles.requirementText,
+                  /[!@#$%^&*]/.test(password) && styles.requirementMet
+                ]}>
+                  至少一个特殊字符 (!@#$%^&*)
+                </Text>
+              </View>
+            </View>
+
             {error && (
               <Text style={styles.errorText}>{error}</Text>
             )}
-            
+
             <Button
-              title="Create Account"
+              title="创建账户"
               onPress={handleRegister}
               loading={isLoading}
               fullWidth
@@ -118,10 +250,12 @@ export default function RegisterScreen() {
               iconPosition="right"
             />
           </View>
-          
+
           <Text style={styles.termsText}>
-            By signing up, you agree to our Terms of Service and Privacy Policy
+            注册即表示您同意我们的服务条款和隐私政策
           </Text>
+
+
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -159,6 +293,32 @@ const styles = StyleSheet.create({
   form: {
     marginBottom: 24,
   },
+  passwordRequirements: {
+    marginTop: 8,
+    marginBottom: 24,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+  },
+  requirementsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  requirement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  requirementText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  requirementMet: {
+    color: colors.success,
+  },
   errorText: {
     color: colors.error,
     marginBottom: 16,
@@ -168,7 +328,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  loginPrompt: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginTop: 'auto',
     marginBottom: 16,
+  },
+  loginText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  loginLink: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+    marginLeft: 4,
   },
 });

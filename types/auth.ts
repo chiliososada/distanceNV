@@ -5,9 +5,9 @@ export interface LoginCredentials {
 
 export interface RegisterData {
   email: string;
-  username: string;
+  username?: string;
   password: string;
-  displayName: string;
+  displayName?: string;
 }
 
 // Alias for backward compatibility
