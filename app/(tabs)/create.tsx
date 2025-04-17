@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  ScrollView, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
   TextInput,
   Image,
   Alert,
@@ -18,12 +18,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { 
-  Image as ImageIcon, 
-  MapPin, 
-  Clock, 
-  Tag, 
-  X, 
+import {
+  Image as ImageIcon,
+  MapPin,
+  Clock,
+  Tag,
+  X,
   Plus,
   ChevronRight,
   Loader,
@@ -50,15 +50,15 @@ export default function CreateScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const topicId = params.topicId as string | undefined;
-  
-  const { 
-    createTopic, 
-    updateTopic, 
+
+  const {
+    createTopic,
+    updateTopic,
     fetchTopicById,
     currentTopic,
-    isLoading 
+    isLoading
   } = useTopicStore();
-  
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [images, setImages] = useState<string[]>([]);
@@ -77,45 +77,72 @@ export default function CreateScreen() {
   const [showExpirationModal, setShowExpirationModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoadingTopic, setIsLoadingTopic] = useState(false);
-  
+
   // Load topic data if in edit mode
   useEffect(() => {
     if (topicId) {
       setIsEditMode(true);
       loadTopicData(topicId);
     } else {
+      // Reset all fields when not in edit mode
+      setTitle('');
+      setContent('');
+      setImages([]);
+      setTags([]);
+      setLocation(null);
+      setExpiresAt(undefined);
+      setSelectedExpirationOption(null);
+      setIsEditMode(false);
       checkLocationPermission();
     }
+
+    // Cleanup when component unmounts
+    return () => {
+      // Clear currentTopic in the store when leaving this screen
+      useTopicStore.setState({ currentTopic: null });
+    };
   }, [topicId]);
-  
+
   const loadTopicData = async (id: string) => {
     setIsLoadingTopic(true);
     try {
+      // Reset form fields to empty before loading topic data
+      setTitle('');
+      setContent('');
+      setImages([]);
+      setTags([]);
+      setLocation(null);
+      setExpiresAt(undefined);
+      setSelectedExpirationOption(null);
+
       await fetchTopicById(id);
+
+      // After fetching, get the freshly loaded topic directly from the store
       const topic = useTopicStore.getState().currentTopic;
-      
+
       if (topic) {
-        setTitle(topic.title);
+        // Only set form fields if we have valid topic data
+        setTitle(topic.title || '');
         setContent(topic.content || '');
         setImages(topic.images || []);
         setTags(topic.tags || []);
-        
+
         if (topic.location) {
           setLocation(topic.location);
         }
-        
+
         if (topic.expiresAt) {
           setExpiresAt(topic.expiresAt);
-          
+
           // Try to find matching expiration option
           const now = new Date();
           const expDate = new Date(topic.expiresAt);
           const diffDays = Math.round((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          
-          const optionIndex = EXPIRATION_OPTIONS.findIndex(opt => 
+
+          const optionIndex = EXPIRATION_OPTIONS.findIndex(opt =>
             opt.unit === 'day' && Math.abs(opt.value - diffDays) <= 1
           );
-          
+
           if (optionIndex !== -1) {
             setSelectedExpirationOption(optionIndex);
           }
@@ -131,16 +158,16 @@ export default function CreateScreen() {
       setIsLoadingTopic(false);
     }
   };
-  
+
   const checkLocationPermission = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     setLocationPermission(status === 'granted');
-    
+
     if (status === 'granted') {
       fetchCurrentLocation();
     }
   };
-  
+
   const fetchCurrentLocation = async () => {
     setLoadingLocation(true);
     try {
@@ -148,13 +175,13 @@ export default function CreateScreen() {
       if (locationData) {
         const { latitude, longitude } = locationData.coords;
         const address = await getAddressFromCoordinates(latitude, longitude);
-        
+
         const newLocation = {
           latitude,
           longitude,
           address: address || undefined,
         };
-        
+
         setLocation(newLocation);
         setShowLocationConfirmation(true);
       }
@@ -168,59 +195,59 @@ export default function CreateScreen() {
       setLoadingLocation(false);
     }
   };
-  
+
   const handleAddImages = async () => {
     if (images.length >= 9) {
       Alert.alert('Limit Reached', 'You can only add up to 9 images');
       return;
     }
-    
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
     });
-    
+
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setImages([...images, result.assets[0].uri]);
     }
   };
-  
+
   const handleRemoveImage = (index: number) => {
     const newImages = [...images];
     newImages.splice(index, 1);
     setImages(newImages);
   };
-  
+
   const handleAddTag = () => {
     if (!tagInput.trim()) return;
-    
+
     const newTag = tagInput.trim().toLowerCase();
     if (!tags.includes(newTag)) {
       setTags([...tags, newTag]);
     }
-    
+
     setTagInput('');
   };
-  
+
   const handleRemoveTag = (tag: string) => {
     setTags(tags.filter(t => t !== tag));
   };
-  
+
   const handleSetExpiration = (index: number) => {
     const option = EXPIRATION_OPTIONS[index];
     const date = new Date();
-    
+
     if (option.unit === 'day') {
       date.setDate(date.getDate() + option.value);
     }
-    
+
     setExpiresAt(date.toISOString());
     setSelectedExpirationOption(index);
     setShowExpirationModal(false);
   };
-  
+
   const handleRemoveExpiration = () => {
     setExpiresAt(undefined);
     setSelectedExpirationOption(null);
@@ -242,23 +269,23 @@ export default function CreateScreen() {
     setShowLocationConfirmation(false);
     setLocation(null);
   };
-  
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter a title');
       return;
     }
-    
+
     if (!content.trim()) {
       Alert.alert('Error', 'Please enter content');
       return;
     }
-    
+
     if (!location) {
       Alert.alert('Error', 'Location is required');
       return;
     }
-    
+
     const topicData = {
       title,
       content,
@@ -267,7 +294,7 @@ export default function CreateScreen() {
       location,
       expiresAt,
     };
-    
+
     try {
       if (isEditMode && topicId) {
         await updateTopic(topicId, topicData);
@@ -276,16 +303,21 @@ export default function CreateScreen() {
         await createTopic(topicData);
         Alert.alert('Success', 'Topic created successfully');
       }
-      
-      // Reset form
+
+      // Reset form completely
       setTitle('');
       setContent('');
       setImages([]);
       setTags([]);
+      setLocation(null);
       setExpiresAt(undefined);
       setSelectedExpirationOption(null);
-      
-      // Navigate back
+      setIsEditMode(false);
+
+      // Clear the current topic to prevent data persistence issues
+      useTopicStore.setState({ currentTopic: null });
+
+      // Just go back to previous screen regardless of edit mode
       router.back();
     } catch (error) {
       console.error('Error saving topic:', error);
@@ -296,7 +328,7 @@ export default function CreateScreen() {
   const handleBack = () => {
     router.back();
   };
-  
+
   if (isLoadingTopic) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -305,12 +337,12 @@ export default function CreateScreen() {
       </SafeAreaView>
     );
   }
-  
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
 
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           title: isEditMode ? 'Edit Topic' : 'Create Topic',
           headerShown: true,
@@ -319,7 +351,7 @@ export default function CreateScreen() {
               <ChevronLeft size={24} color={colors.text} />
             </TouchableOpacity>
           ),
-        }} 
+        }}
       />
 
       <KeyboardAvoidingView
@@ -330,12 +362,12 @@ export default function CreateScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <Text style={styles.subtitle}>
-              {isEditMode 
-                ? 'Update your topic information' 
+              {isEditMode
+                ? 'Update your topic information'
                 : 'Share something with people nearby'}
             </Text>
           </View>
-          
+
           <View style={styles.form}>
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Title</Text>
@@ -348,7 +380,7 @@ export default function CreateScreen() {
                 maxLength={100}
               />
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Content</Text>
               <TextInput
@@ -361,7 +393,7 @@ export default function CreateScreen() {
                 textAlignVertical="top"
               />
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Images</Text>
               <View style={styles.imagesContainer}>
@@ -376,7 +408,7 @@ export default function CreateScreen() {
                     </TouchableOpacity>
                   </View>
                 ))}
-                
+
                 {images.length < 9 && (
                   <TouchableOpacity
                     style={styles.addImageButton}
@@ -387,7 +419,7 @@ export default function CreateScreen() {
                 )}
               </View>
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Tags</Text>
               <View style={styles.tagsInputContainer}>
@@ -408,7 +440,7 @@ export default function CreateScreen() {
                   <Plus size={20} color={colors.primary} />
                 </TouchableOpacity>
               </View>
-              
+
               {tags.length > 0 && (
                 <View style={styles.tagsContainer}>
                   {tags.map((tag) => (
@@ -425,7 +457,7 @@ export default function CreateScreen() {
                 </View>
               )}
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Location</Text>
               <TouchableOpacity
@@ -467,7 +499,7 @@ export default function CreateScreen() {
                 </Text>
               )}
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Expiration</Text>
               {expiresAt ? (
@@ -475,7 +507,7 @@ export default function CreateScreen() {
                   <View style={styles.expirationInfo}>
                     <Calendar size={20} color={colors.primary} />
                     <Text style={styles.expirationText}>
-                      {selectedExpirationOption !== null 
+                      {selectedExpirationOption !== null
                         ? `Expires in ${EXPIRATION_OPTIONS[selectedExpirationOption].label}`
                         : formatExpirationTime(expiresAt)}
                     </Text>
@@ -503,7 +535,7 @@ export default function CreateScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      
+
       <View style={styles.footer}>
         <Button
           title={isEditMode ? "Update Topic" : "Post Topic"}
@@ -526,23 +558,23 @@ export default function CreateScreen() {
               <MapPin size={24} color={colors.primary} />
               <Text style={styles.modalTitle}>Confirm Location</Text>
             </View>
-            
+
             <Text style={styles.modalText}>
               We found your current location:
             </Text>
             <Text style={styles.locationAddress}>
               {location?.address || 'Unknown location'}
             </Text>
-            
+
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonCancel]}
                 onPress={cancelLocation}
               >
                 <Text style={styles.modalButtonText}>Try Again</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonConfirm]}
                 onPress={confirmLocation}
               >
@@ -568,14 +600,14 @@ export default function CreateScreen() {
               <Calendar size={24} color={colors.primary} />
               <Text style={styles.modalTitle}>Set Expiration Time</Text>
             </View>
-            
+
             <Text style={styles.modalText}>
               Choose when this topic will expire:
             </Text>
-            
+
             <View style={styles.expirationOptions}>
               {EXPIRATION_OPTIONS.map((option, index) => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={index}
                   style={styles.expirationOption}
                   onPress={() => handleSetExpiration(index)}
@@ -585,8 +617,8 @@ export default function CreateScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.modalButton, styles.modalButtonCancel, styles.fullWidthButton]}
               onPress={() => setShowExpirationModal(false)}
             >

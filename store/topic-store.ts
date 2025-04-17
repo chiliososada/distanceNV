@@ -198,7 +198,7 @@ const mockTopics: Topic[] = [
 const generateMoreMockTopics = (page: number, pageSize: number = 5): Topic[] => {
   const startId = mockTopics.length + 1 + (page - 1) * pageSize;
   const newTopics: Topic[] = [];
-  
+
   // Sample addresses for generated topics
   const sampleAddresses = [
     'Mission District, San Francisco, CA',
@@ -212,13 +212,13 @@ const generateMoreMockTopics = (page: number, pageSize: number = 5): Topic[] => 
     'Haight-Ashbury, San Francisco, CA',
     'Castro District, San Francisco, CA'
   ];
-  
+
   for (let i = 0; i < pageSize; i++) {
     const id = String(startId + i);
     const authorId = Math.random() > 0.5 ? '1' : '2';
     const author = mockTopics.find(t => t.authorId === authorId)?.author!;
     const addressIndex = Math.floor(Math.random() * sampleAddresses.length);
-    
+
     newTopics.push({
       id,
       title: `Generated Topic ${id}`,
@@ -240,7 +240,7 @@ const generateMoreMockTopics = (page: number, pageSize: number = 5): Topic[] => 
       isLiked: Math.random() > 0.7,
     });
   }
-  
+
   return newTopics;
 };
 
@@ -294,11 +294,11 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           // In a real app, we would fetch from an API
-          set({ 
-            topics: mockTopics, 
-            filteredTopics: mockTopics, 
+          set({
+            topics: mockTopics,
+            filteredTopics: mockTopics,
             isLoading: false,
             currentPage: 1,
             hasMoreTopics: true
@@ -314,18 +314,18 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           // Filter topics by user ID
           const userTopics = mockTopics.filter(topic => topic.authorId === userId);
-          
-          set({ 
-            userTopics, 
-            isLoading: false 
+
+          set({
+            userTopics,
+            isLoading: false
           });
         } catch (error) {
           console.error("Failed to fetch user topics:", error);
-          set({ 
-            error: "Failed to fetch user topics", 
+          set({
+            error: "Failed to fetch user topics",
             isLoading: false,
             userTopics: [] // Ensure userTopics is always an array even on error
           });
@@ -337,25 +337,25 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           // Filter topics that are liked
           // In a real app, you would fetch this from an API
           const likedTopics = mockTopics.filter(topic => topic.isLiked);
-          
+
           // Add some random liked topics for demo purposes
           const extraLikedTopics = generateMoreMockTopics(1, 3).map(topic => ({
             ...topic,
             isLiked: true
           }));
-          
-          set({ 
-            likedTopics: [...likedTopics, ...extraLikedTopics], 
-            isLikedTopicsLoading: false 
+
+          set({
+            likedTopics: [...likedTopics, ...extraLikedTopics],
+            isLikedTopicsLoading: false
           });
         } catch (error) {
           console.error("Failed to fetch liked topics:", error);
-          set({ 
-            error: "Failed to fetch liked topics", 
+          set({
+            error: "Failed to fetch liked topics",
             isLikedTopicsLoading: false,
             likedTopics: [] // Ensure likedTopics is always an array even on error
           });
@@ -365,23 +365,23 @@ export const useTopicStore = create<TopicStore>()(
       loadMoreTopics: async () => {
         const { currentPage, filter } = get();
         const nextPage = currentPage + 1;
-        
+
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1500));
-          
+
           // Generate more mock topics
           const newTopics = generateMoreMockTopics(nextPage);
-          
+
           // If we have less than the page size, there are no more topics
           const hasMore = newTopics.length === 5;
-          
+
           set(state => ({
             topics: [...state.topics, ...newTopics],
             currentPage: nextPage,
             hasMoreTopics: hasMore
           }));
-          
+
           get().applyFilters();
         } catch (error) {
           console.error("Failed to load more topics", error);
@@ -393,9 +393,9 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 500));
-          
+
           const topic = get().topics.find(t => t.id === id);
-          
+
           if (topic) {
             set({ currentTopic: topic, isLoading: false });
           } else {
@@ -411,14 +411,14 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           const user = useAuthStore.getState().user;
-          
+
           if (!user) {
             set({ error: "Not authenticated", isLoading: false });
             return;
           }
-          
+
           const newTopic: Topic = {
             id: String(get().topics.length + 1),
             title: topicData.title,
@@ -435,17 +435,17 @@ export const useTopicStore = create<TopicStore>()(
             commentsCount: 0,
             isLiked: false,
           };
-          
+
           // In a real app, we would save this to the backend
           const updatedTopics = [newTopic, ...get().topics];
           set({ topics: updatedTopics, isLoading: false });
-          
+
           // Update userTopics if the new topic belongs to the current user
           const { userTopics } = get();
           if (userTopics.length > 0) {
             set({ userTopics: [newTopic, ...userTopics] });
           }
-          
+
           get().applyFilters();
         } catch (error) {
           set({ error: "Failed to create topic", isLoading: false });
@@ -457,26 +457,26 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           const topics = get().topics;
           const topicIndex = topics.findIndex(t => t.id === id);
-          
+
           if (topicIndex === -1) {
             set({ error: "Topic not found", isLoading: false });
             return;
           }
-          
+
           const updatedTopic = {
             ...topics[topicIndex],
             ...topicData,
             updatedAt: new Date().toISOString(),
           };
-          
+
           const updatedTopics = [...topics];
           updatedTopics[topicIndex] = updatedTopic;
-          
+
           set({ topics: updatedTopics, isLoading: false });
-          
+
           // Update userTopics if needed
           const { userTopics } = get();
           if (userTopics.length > 0) {
@@ -487,7 +487,7 @@ export const useTopicStore = create<TopicStore>()(
               set({ userTopics: updatedUserTopics });
             }
           }
-          
+
           // Update likedTopics if needed
           const { likedTopics } = get();
           if (likedTopics.length > 0) {
@@ -498,11 +498,11 @@ export const useTopicStore = create<TopicStore>()(
               set({ likedTopics: updatedLikedTopics });
             }
           }
-          
+
           if (get().currentTopic?.id === id) {
             set({ currentTopic: updatedTopic });
           }
-          
+
           get().applyFilters();
         } catch (error) {
           set({ error: "Failed to update topic", isLoading: false });
@@ -514,28 +514,28 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           const updatedTopics = get().topics.filter(t => t.id !== id);
           set({ topics: updatedTopics, isLoading: false });
-          
+
           // Update userTopics if needed
           const { userTopics } = get();
           if (userTopics.length > 0) {
             const updatedUserTopics = userTopics.filter(t => t.id !== id);
             set({ userTopics: updatedUserTopics });
           }
-          
+
           // Update likedTopics if needed
           const { likedTopics } = get();
           if (likedTopics.length > 0) {
             const updatedLikedTopics = likedTopics.filter(t => t.id !== id);
             set({ likedTopics: updatedLikedTopics });
           }
-          
+
           if (get().currentTopic?.id === id) {
             set({ currentTopic: null });
           }
-          
+
           get().applyFilters();
         } catch (error) {
           set({ error: "Failed to delete topic", isLoading: false });
@@ -546,27 +546,27 @@ export const useTopicStore = create<TopicStore>()(
         try {
           // Simulate API call
           await new Promise(resolve => setTimeout(resolve, 300));
-          
+
           const topics = get().topics;
           const topicIndex = topics.findIndex(t => t.id === id);
-          
+
           if (topicIndex === -1) return;
-          
+
           const topic = topics[topicIndex];
           const isLiked = !topic.isLiked;
           const likesCount = isLiked ? topic.likesCount + 1 : topic.likesCount - 1;
-          
+
           const updatedTopic = {
             ...topic,
             isLiked,
             likesCount,
           };
-          
+
           const updatedTopics = [...topics];
           updatedTopics[topicIndex] = updatedTopic;
-          
+
           set({ topics: updatedTopics });
-          
+
           // Update userTopics if needed
           const { userTopics } = get();
           if (userTopics.length > 0) {
@@ -577,7 +577,7 @@ export const useTopicStore = create<TopicStore>()(
               set({ userTopics: updatedUserTopics });
             }
           }
-          
+
           // Update likedTopics if needed
           const { likedTopics } = get();
           if (likedTopics.length > 0) {
@@ -598,11 +598,11 @@ export const useTopicStore = create<TopicStore>()(
               set({ likedTopics: updatedLikedTopics });
             }
           }
-          
+
           if (get().currentTopic?.id === id) {
             set({ currentTopic: updatedTopic });
           }
-          
+
           get().applyFilters();
         } catch (error) {
           console.error("Failed to like topic", error);
@@ -617,32 +617,32 @@ export const useTopicStore = create<TopicStore>()(
       applyFilters: () => {
         const { topics, filter } = get();
         let filtered = [...topics];
-        
+
         // Apply search filter
         if (filter.search) {
           const searchLower = filter.search.toLowerCase();
           filtered = filtered.filter(
-            topic => 
+            topic =>
               topic.title.toLowerCase().includes(searchLower) ||
               topic.content.toLowerCase().includes(searchLower) ||
               topic.tags.some(tag => tag.toLowerCase().includes(searchLower))
           );
         }
-        
+
         // Apply tag filter
         if (filter.tags && filter.tags.length > 0) {
           filtered = filtered.filter(
             topic => filter.tags!.some(tag => topic.tags.includes(tag))
           );
         }
-        
+
         // Apply distance filter
         if (filter.distance) {
           filtered = filtered.filter(
             topic => topic.distance !== undefined && topic.distance <= filter.distance!
           );
         }
-        
+
         // Apply sorting
         if (filter.sort) {
           switch (filter.sort) {
@@ -657,7 +657,7 @@ export const useTopicStore = create<TopicStore>()(
               break;
           }
         }
-        
+
         set({ filteredTopics: filtered });
       },
     }),
