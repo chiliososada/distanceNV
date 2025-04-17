@@ -1,28 +1,29 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  FlatList, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  FlatList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
   Image,
   Animated,
   NativeSyntheticEvent,
-  NativeScrollEvent
+  NativeScrollEvent,
+  Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { 
-  Search, 
-  MapPin, 
-  Users, 
-  Store, 
-  Heart, 
-  MessageCircle, 
-  Clock, 
+import {
+  Search,
+  MapPin,
+  Users,
+  Store,
+  Heart,
+  MessageCircle,
+  Clock,
   Eye,
   Filter
 } from 'lucide-react-native';
@@ -124,53 +125,24 @@ const mockNearbyUsers: NearbyUser[] = [
       createdAt: new Date(2023, 6, 13).toISOString(),
       distance: 0.5,
     },
-  },
-  {
-    user: {
-      id: '6',
-      type: 'business',
-      email: 'contact@bookstore.com',
-      username: 'cornerbookstore',
-      displayName: 'Corner Bookstore',
-      bio: 'Independent bookstore with rare finds and cozy reading nooks',
-      avatar: 'https://images.unsplash.com/photo-1526243741027-444d633d7365',
-      businessName: 'Corner Bookstore',
-      businessCategory: 'Bookstore',
-      businessHours: 'Daily: 10am-8pm',
-      businessPhone: '(415) 555-5678',
-      businessWebsite: 'www.cornerbookstore.com',
-      location: {
-        latitude: 37.7831,
-        longitude: -122.4159,
-        address: '456 Valencia St, San Francisco, CA',
-      },
-      createdAt: new Date(2022, 8, 15).toISOString(),
-      updatedAt: new Date(2023, 5, 20).toISOString(),
-      followersCount: 356,
-      followingCount: 42,
-      topicsCount: 63,
-      viewCount: 1876,
-      lastActiveAt: new Date(2023, 6, 14, 12, 30).toISOString(),
-    },
-    distance: 1.8,
-  },
+  }
 ];
 
 type ExploreTab = 'topics' | 'people' | 'businesses';
 
 export default function ExploreScreen() {
   const router = useRouter();
-  const { 
-    filteredTopics, 
-    fetchTopics, 
-    isLoading, 
-    filter, 
+  const {
+    filteredTopics,
+    fetchTopics,
+    isLoading,
+    filter,
     setFilter,
     loadMoreTopics,
     hasMoreTopics,
     likeTopic
   } = useTopicStore();
-  
+
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ExploreTab>('topics');
@@ -178,28 +150,25 @@ export default function ExploreScreen() {
   const [nearbyUsers, setNearbyUsers] = useState<NearbyUser[]>([]);
   const [loadingNearby, setLoadingNearby] = useState(false);
   const [showFilterOptions, setShowFilterOptions] = useState(false);
-  
-  // Animation related state
+
+  // 滚动相关的状态
   const scrollY = useRef(new Animated.Value(0)).current;
-  const lastScrollY = useRef(0);
-  const headerHeight = useRef(new Animated.Value(1)).current;
-  const headerOpacity = useRef(new Animated.Value(1)).current;
-  
+
   useEffect(() => {
     fetchTopics();
     fetchNearbyUsers();
   }, []);
-  
+
   const fetchNearbyUsers = async () => {
     setLoadingNearby(true);
-    
-    // Simulate API call
+
+    // 模拟API调用
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     setNearbyUsers(mockNearbyUsers);
     setLoadingNearby(false);
   };
-  
+
   const handleRefresh = async () => {
     setRefreshing(true);
     if (activeTab === 'topics') {
@@ -209,23 +178,23 @@ export default function ExploreScreen() {
     }
     setRefreshing(false);
   };
-  
+
   const handleSearch = (text: string) => {
     setSearchQuery(text);
     setFilter({ search: text });
   };
-  
+
   const handleLoadMore = async () => {
     if (loadingMore || !hasMoreTopics || isLoading || activeTab !== 'topics') return;
-    
+
     setLoadingMore(true);
     await loadMoreTopics();
     setLoadingMore(false);
   };
-  
+
   const renderFooter = () => {
     if (!loadingMore || activeTab !== 'topics') return null;
-    
+
     return (
       <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color={colors.primary} />
@@ -233,7 +202,7 @@ export default function ExploreScreen() {
       </View>
     );
   };
-  
+
   const handleUserPress = (userId: string) => {
     router.push(`/profile/${userId}`);
   };
@@ -254,117 +223,46 @@ export default function ExploreScreen() {
     setFilter({ sort: sortOption });
     setShowFilterOptions(false);
   };
-  
-  // Handle scroll events to show/hide header
+
+  // 简化的滚动处理函数 - 移除了顶部隐藏逻辑
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    { 
-      useNativeDriver: false,
-      listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const currentScrollY = event.nativeEvent.contentOffset.y;
-        
-        // Show header when at the top
-        if (currentScrollY <= 0) {
-          Animated.parallel([
-            Animated.timing(headerHeight, {
-              toValue: 1,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-            Animated.timing(headerOpacity, {
-              toValue: 1,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-          ]).start();
-        } 
-        // Hide header when scrolling down
-        else if (currentScrollY > lastScrollY.current && currentScrollY > 10) {
-          Animated.parallel([
-            Animated.timing(headerHeight, {
-              toValue: 0,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-            Animated.timing(headerOpacity, {
-              toValue: 0,
-              duration: 150,
-              useNativeDriver: false,
-            }),
-          ]).start();
-        } 
-        // Show header when scrolling up
-        else if (currentScrollY < lastScrollY.current) {
-          Animated.parallel([
-            Animated.timing(headerHeight, {
-              toValue: 1,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-            Animated.timing(headerOpacity, {
-              toValue: 1,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-          ]).start();
-        }
-        
-        lastScrollY.current = currentScrollY;
-      }
-    }
+    { useNativeDriver: false }
   );
-  
-  // Show header when user stops scrolling at the top
-  const handleScrollEndDrag = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const currentScrollY = event.nativeEvent.contentOffset.y;
-    if (currentScrollY <= 0) {
-      Animated.parallel([
-        Animated.timing(headerHeight, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-        Animated.timing(headerOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-      ]).start();
-    }
-  };
-  
-  const renderPersonCard = (item: NearbyUser) => {
+
+  // 修复类型错误：添加正确的返回类型声明
+  const renderPersonCard = (item: NearbyUser): React.ReactElement => {
     const { user, distance, lastTopic } = item;
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.userCard}
         onPress={() => handleUserPress(user.id)}
         activeOpacity={0.8}
       >
         <View style={styles.userCardHeader}>
-          <Avatar 
-            source={user.avatar} 
-            name={user.displayName} 
-            size="medium" 
+          <Avatar
+            source={user.avatar}
+            name={user.displayName}
+            size="medium"
           />
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{user.displayName}</Text>
             <View style={styles.userDistance}>
               <MapPin size={12} color={colors.textSecondary} />
               <Text style={styles.distanceText}>
-                {distance < 1 
-                  ? `${Math.round(distance * 1000)}m away` 
+                {distance < 1
+                  ? `${Math.round(distance * 1000)}m away`
                   : `${distance.toFixed(1)}km away`}
               </Text>
             </View>
           </View>
         </View>
-        
+
         <Text style={styles.userBio} numberOfLines={2}>
           {user.bio}
         </Text>
-        
+
         <View style={styles.userStats}>
           <View style={styles.statItem}>
             <MessageCircle size={14} color={colors.textSecondary} />
@@ -375,9 +273,9 @@ export default function ExploreScreen() {
             <Text style={styles.statText}>{user.likesCount || 0} likes</Text>
           </View>
         </View>
-        
+
         {lastTopic && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.lastTopic}
             onPress={() => handleTopicPress(lastTopic.id)}
           >
@@ -394,8 +292,8 @@ export default function ExploreScreen() {
                 <>
                   <MapPin size={12} color={colors.textSecondary} style={styles.lastTopicIcon} />
                   <Text style={styles.lastTopicDistance}>
-                    {lastTopic.distance < 1 
-                      ? `${Math.round(lastTopic.distance * 1000)}m` 
+                    {lastTopic.distance < 1
+                      ? `${Math.round(lastTopic.distance * 1000)}m`
                       : `${lastTopic.distance.toFixed(1)}km`}
                   </Text>
                 </>
@@ -406,21 +304,22 @@ export default function ExploreScreen() {
       </TouchableOpacity>
     );
   };
-  
-  const renderBusinessCard = (item: NearbyUser) => {
+
+  // 修复类型错误：添加正确的返回类型声明
+  const renderBusinessCard = (item: NearbyUser): React.ReactElement => {
     const { user, distance } = item;
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.businessCard}
         onPress={() => handleUserPress(user.id)}
         activeOpacity={0.8}
       >
         <View style={styles.businessCardHeader}>
           <View style={styles.businessImageContainer}>
-            <Image 
-              source={{ uri: user.avatar }} 
-              style={styles.businessImage} 
+            <Image
+              source={{ uri: user.avatar }}
+              style={styles.businessImage}
               resizeMode="cover"
             />
             <View style={styles.businessCategory}>
@@ -429,31 +328,31 @@ export default function ExploreScreen() {
               </Text>
             </View>
           </View>
-          
+
           <View style={styles.businessInfo}>
             <Text style={styles.businessName}>{user.businessName}</Text>
             <View style={styles.businessDistance}>
               <MapPin size={12} color={colors.textSecondary} />
               <Text style={styles.distanceText}>
-                {distance < 1 
-                  ? `${Math.round(distance * 1000)}m away` 
+                {distance < 1
+                  ? `${Math.round(distance * 1000)}m away`
                   : `${distance.toFixed(1)}km away`}
               </Text>
             </View>
           </View>
         </View>
-        
+
         <Text style={styles.businessBio} numberOfLines={2}>
           {user.bio}
         </Text>
-        
+
         <View style={styles.businessLocation}>
           <MapPin size={14} color={colors.primary} />
           <Text style={styles.locationText} numberOfLines={1}>
             {user.location?.address}
           </Text>
         </View>
-        
+
         <View style={styles.businessStats}>
           <View style={styles.statItem}>
             <MessageCircle size={14} color={colors.textSecondary} />
@@ -467,49 +366,25 @@ export default function ExploreScreen() {
       </TouchableOpacity>
     );
   };
-  
-  const renderNearbyItem = ({ item }: { item: NearbyUser }) => {
-    return item.user.type === 'business' 
-      ? renderBusinessCard(item) 
+
+  // 修复类型错误：添加正确的返回类型声明
+  const renderNearbyItem = ({ item }: { item: NearbyUser }): React.ReactElement => {
+    return item.user.type === 'business'
+      ? renderBusinessCard(item)
       : renderPersonCard(item);
   };
-  
-  // Calculate header container height based on animation value
-  const headerContainerHeight = headerHeight.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, showFilterOptions ? 170 : 110], // Adjust based on your header content
-    extrapolate: 'clamp',
-  });
-  
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
-      {/* Animated header container */}
-      <Animated.View 
-        style={[
-          styles.headerContainer,
-          { 
-            height: headerContainerHeight,
-            opacity: headerOpacity,
-            overflow: 'hidden'
-          }
-        ]}
-      >
-        <View style={styles.header}>
+
+      {/* 重新设计的顶部区域 */}
+      <View style={styles.headerContainer}>
+        {/* 标题和过滤按钮在同一行 */}
+        <View style={styles.titleRow}>
           <Text style={styles.title}>Explore</Text>
-        </View>
-        
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBarWrapper}>
-            <SearchBar
-              value={searchQuery}
-              onChangeText={handleSearch}
-              placeholder="Search topics, tags, or users"
-              compact={true}
-            />
-          </View>
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.filterButton}
             onPress={toggleFilterOptions}
           >
@@ -517,11 +392,22 @@ export default function ExploreScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* 搜索栏单独一行 */}
+        <View style={styles.searchContainer}>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={handleSearch}
+            placeholder="Search topics, tags, or users"
+            compact={true}
+          />
+        </View>
+
+        {/* 过滤选项 - 仅在showFilterOptions为true时显示 */}
         {showFilterOptions && (
           <View style={styles.filterOptionsContainer}>
             <Text style={styles.filterOptionsTitle}>Sort by:</Text>
             <View style={styles.filterOptionsRow}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.filterOption,
                   filter.sort === 'recent' && styles.filterOptionActive
@@ -535,7 +421,7 @@ export default function ExploreScreen() {
                   Most Recent
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.filterOption,
                   filter.sort === 'popular' && styles.filterOptionActive
@@ -549,7 +435,7 @@ export default function ExploreScreen() {
                   Most Popular
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[
                   styles.filterOption,
                   filter.sort === 'distance' && styles.filterOptionActive
@@ -566,59 +452,59 @@ export default function ExploreScreen() {
             </View>
           </View>
         )}
-      </Animated.View>
-      
-      {/* Tabs - always visible */}
+      </View>
+
+      {/* 选项卡区域 */}
       <View style={styles.tabsContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'topics' && styles.activeTab]}
           onPress={() => setActiveTab('topics')}
         >
-          <Search 
-            size={16} 
-            color={activeTab === 'topics' ? colors.primary : colors.textSecondary} 
+          <Search
+            size={16}
+            color={activeTab === 'topics' ? colors.primary : colors.textSecondary}
           />
           <Text style={[
-            styles.tabText, 
+            styles.tabText,
             activeTab === 'topics' && styles.activeTabText
           ]}>
             Topics
           </Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'people' && styles.activeTab]}
           onPress={() => setActiveTab('people')}
         >
-          <Users 
-            size={16} 
-            color={activeTab === 'people' ? colors.primary : colors.textSecondary} 
+          <Users
+            size={16}
+            color={activeTab === 'people' ? colors.primary : colors.textSecondary}
           />
           <Text style={[
-            styles.tabText, 
+            styles.tabText,
             activeTab === 'people' && styles.activeTabText
           ]}>
             People
           </Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
+
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'businesses' && styles.activeTab]}
           onPress={() => setActiveTab('businesses')}
         >
-          <Store 
-            size={16} 
-            color={activeTab === 'businesses' ? colors.primary : colors.textSecondary} 
+          <Store
+            size={16}
+            color={activeTab === 'businesses' ? colors.primary : colors.textSecondary}
           />
           <Text style={[
-            styles.tabText, 
+            styles.tabText,
             activeTab === 'businesses' && styles.activeTabText
           ]}>
             Businesses
           </Text>
         </TouchableOpacity>
       </View>
-      
+
       {activeTab === 'topics' ? (
         isLoading && !refreshing ? (
           <View style={styles.loadingContainer}>
@@ -629,8 +515,8 @@ export default function ExploreScreen() {
             data={filteredTopics}
             keyExtractor={(item) => `explore-topic-${item.id}-${item.authorId}`}
             renderItem={({ item }) => (
-              <TopicCard 
-                topic={item} 
+              <TopicCard
+                topic={item}
                 onPress={() => handleTopicPress(item.id)}
                 onLike={handleLikeTopic}
               />
@@ -656,7 +542,6 @@ export default function ExploreScreen() {
               </View>
             }
             onScroll={handleScroll}
-            onScrollEndDrag={handleScrollEndDrag}
             scrollEventThrottle={16}
           />
         )
@@ -667,9 +552,9 @@ export default function ExploreScreen() {
           </View>
         ) : (
           <FlatList
-            data={nearbyUsers.filter(item => 
-              activeTab === 'people' 
-                ? item.user.type === 'person' 
+            data={nearbyUsers.filter(item =>
+              activeTab === 'people'
+                ? item.user.type === 'person'
                 : item.user.type === 'business'
             )}
             keyExtractor={(item) => `user-${item.user.id}-${activeTab}`}
@@ -694,7 +579,6 @@ export default function ExploreScreen() {
               </View>
             }
             onScroll={handleScroll}
-            onScrollEndDrag={handleScrollEndDrag}
             scrollEventThrottle={16}
           />
         )
@@ -703,6 +587,8 @@ export default function ExploreScreen() {
   );
 }
 
+const { width } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -710,33 +596,23 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     backgroundColor: colors.background,
-  },
-  header: {
     paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 4,
+    paddingBottom: 6,
+  },
+  // 标题和过滤按钮在同一行
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: colors.text,
   },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  searchBarWrapper: {
-    flex: 1,
-  },
   filterButton: {
-    marginLeft: 8,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -746,8 +622,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  // 搜索容器
+  searchContainer: {
+    marginBottom: 8,
+  },
+  // 过滤选项相关样式
   filterOptionsContainer: {
-    marginHorizontal: 16,
     marginBottom: 8,
     padding: 10,
     backgroundColor: colors.card,
@@ -786,6 +666,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
+  // 选项卡相关样式
   tabsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -851,6 +732,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 8,
   },
+
+  // 用户卡片样式
   userCard: {
     backgroundColor: colors.background,
     borderRadius: 12,
@@ -941,6 +824,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 4,
   },
+
+  // 商家卡片样式
   businessCard: {
     backgroundColor: colors.background,
     borderRadius: 12,

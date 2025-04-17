@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  FlatList, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  FlatList,
   RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
@@ -25,86 +25,78 @@ import { useAuthStore } from '@/store/auth-store';
 import { getCurrentLocation } from '@/utils/location';
 import { TopicFilter } from '@/types/topic';
 
-const HEADER_MAX_HEIGHT = 160; // Approximate height of the header content
+// 减小标题栏的高度，让布局更紧凑
+const HEADER_MAX_HEIGHT = 130;
 const HEADER_MIN_HEIGHT = 0;
-const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
-  const { 
-    filteredTopics, 
-    fetchTopics, 
-    isLoading, 
-    filter, 
+  const {
+    filteredTopics,
+    fetchTopics,
+    isLoading,
+    filter,
     setFilter,
     hasMoreTopics,
     loadMoreTopics,
     likeTopic
   } = useTopicStore();
-  
+
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [location, setLocation] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
-  
+
   // Animation related state
   const scrollY = useRef(new Animated.Value(0)).current;
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const lastScrollY = useRef(0);
   const headerHeight = useRef(new Animated.Value(HEADER_MAX_HEIGHT)).current;
-  const headerOpacity = useRef(new Animated.Value(1)).current;
-  
+
   useEffect(() => {
     fetchTopics();
     loadLocation();
   }, []);
-  
+
   const loadLocation = async () => {
     const locationData = await getCurrentLocation();
     if (locationData) {
       setLocation('Current Location');
     }
   };
-  
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchTopics();
     setRefreshing(false);
   };
-  
+
   const handleSearch = (text: string) => {
     setSearchQuery(text);
     setFilter({ search: text });
   };
-  
+
   const handleFilterPress = () => {
     setFilterMenuVisible(true);
   };
-  
+
   const handleSortPress = () => {
     setSortMenuVisible(true);
   };
-  
+
   const handleSortSelect = (sortValue: TopicFilter['sort']) => {
     setFilter({ sort: sortValue });
   };
-  
+
   const handleFilterSelect = (filterValue: string) => {
-    // This is a placeholder for actual filter implementation
-    // In a real app, you would apply different filters based on the selected value
-    console.log('Selected filter:', filterValue);
-    
-    // Example implementation:
     if (filterValue === 'nearby') {
       setFilter({ distance: 5 });
     } else if (filterValue === 'all') {
       setFilter({ distance: undefined });
     }
   };
-  
+
   const getSortLabel = () => {
     switch (filter.sort) {
       case 'recent': return 'Recent';
@@ -116,7 +108,7 @@ export default function HomeScreen() {
 
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || !hasMoreTopics || isLoading) return;
-    
+
     setLoadingMore(true);
     await loadMoreTopics();
     setLoadingMore(false);
@@ -126,76 +118,19 @@ export default function HomeScreen() {
     likeTopic(id);
   };
 
+  // 简化滚动处理函数
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    { 
-      useNativeDriver: false,
-      listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const currentScrollY = event.nativeEvent.contentOffset.y;
-        
-        // Determine scroll direction
-        if (currentScrollY > lastScrollY.current + 5 && isHeaderVisible) {
-          // Scrolling down - hide header
-          Animated.parallel([
-            Animated.timing(headerHeight, {
-              toValue: HEADER_MIN_HEIGHT,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-            Animated.timing(headerOpacity, {
-              toValue: 0,
-              duration: 150,
-              useNativeDriver: false,
-            })
-          ]).start(() => {
-            setIsHeaderVisible(false);
-          });
-        } else if (currentScrollY < lastScrollY.current - 5 && !isHeaderVisible) {
-          // Scrolling up - show header
-          setIsHeaderVisible(true);
-          Animated.parallel([
-            Animated.timing(headerHeight, {
-              toValue: HEADER_MAX_HEIGHT,
-              duration: 200,
-              useNativeDriver: false,
-            }),
-            Animated.timing(headerOpacity, {
-              toValue: 1,
-              duration: 150,
-              useNativeDriver: false,
-            })
-          ]).start();
-        }
-        
-        lastScrollY.current = currentScrollY;
-      }
-    }
+    { useNativeDriver: false }
   );
 
-  // When user stops scrolling, show header if it's at the top
-  const handleScrollEndDrag = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const currentScrollY = event.nativeEvent.contentOffset.y;
-    
-    if (currentScrollY <= 10 && !isHeaderVisible) {
-      setIsHeaderVisible(true);
-      Animated.parallel([
-        Animated.timing(headerHeight, {
-          toValue: HEADER_MAX_HEIGHT,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-        Animated.timing(headerOpacity, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: false,
-        })
-      ]).start();
-    }
+  const handleScrollEndDrag = () => {
+    // 不进行任何操作
   };
 
   const renderFooter = () => {
     if (!loadingMore) return null;
-    
+
     return (
       <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color={colors.primary} />
@@ -203,80 +138,64 @@ export default function HomeScreen() {
       </View>
     );
   };
-  
+
   const sortOptions = [
-    { 
-      label: 'Recent', 
+    {
+      label: 'Recent',
       value: 'recent' as const,
       icon: <Clock size={18} color={filter.sort === 'recent' ? colors.primary : colors.textSecondary} />
     },
-    { 
-      label: 'Popular', 
+    {
+      label: 'Popular',
       value: 'popular' as const,
       icon: <TrendingUp size={18} color={filter.sort === 'popular' ? colors.primary : colors.textSecondary} />
     },
-    { 
-      label: 'Distance', 
+    {
+      label: 'Distance',
       value: 'distance' as const,
       icon: <Navigation size={18} color={filter.sort === 'distance' ? colors.primary : colors.textSecondary} />
     }
   ];
-  
+
   const filterOptions = [
     { label: 'All Topics', value: 'all' },
     { label: 'Nearby (5 miles)', value: 'nearby' },
     { label: 'Events Only', value: 'events' },
     { label: 'With Images', value: 'images' }
   ];
-  
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
-      <Animated.View 
-        style={[
-          styles.headerContainer,
-          {
-            height: headerHeight,
-            opacity: headerOpacity,
-            overflow: 'hidden'
-          }
-        ]}
-      >
-        <View style={styles.header}>
-          <View style={styles.locationContainer}>
-            <MapPin size={16} color={colors.primary} />
-            <Text style={styles.locationText}>
-              {location || 'Set your location'}
-            </Text>
-          </View>
-          
+
+      {/* 修改后的顶部区域布局 */}
+      <View style={styles.headerContainer}>
+        {/* 位置信息区域 */}
+        <View style={styles.locationContainer}>
+          <MapPin size={16} color={colors.primary} />
+          <Text style={styles.locationText}>
+            {location || 'Set your location'}
+          </Text>
+        </View>
+
+        {/* 欢迎语和过滤器区域 - 使用flexDirection: 'row'将它们放在同一行 */}
+        <View style={styles.greetingRow}>
           <Text style={styles.greeting}>
             Hello, {user?.displayName?.split(' ')[0] || 'there'}!
           </Text>
-        </View>
-        
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBarWrapper}>
-            <SearchBar
-              value={searchQuery}
-              onChangeText={handleSearch}
-              placeholder="Search topics, tags, or users"
-              compact={true}
-            />
-          </View>
-          
-          <View style={styles.filtersRow}>
-            <TouchableOpacity 
-              style={styles.filterButton} 
+
+          {/* 过滤和排序按钮移到欢迎语的右侧 */}
+          <View style={styles.filtersContainer}>
+            <TouchableOpacity
+              style={styles.filterButton}
               onPress={handleFilterPress}
             >
-              <Filter size={14} color={colors.textSecondary} />
+              <Filter size={16} color={colors.textSecondary} />
               <Text style={styles.filterText}>Filters</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.sortButton} 
+
+            <TouchableOpacity
+              style={styles.sortButton}
               onPress={handleSortPress}
             >
               <Text style={styles.sortText}>{getSortLabel()}</Text>
@@ -284,8 +203,18 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </Animated.View>
-      
+
+        {/* 搜索框单独占一行 */}
+        <View style={styles.searchContainer}>
+          <SearchBar
+            value={searchQuery}
+            onChangeText={handleSearch}
+            placeholder="Search topics, tags, or users"
+            compact={true}
+          />
+        </View>
+      </View>
+
       {isLoading && !refreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -295,23 +224,19 @@ export default function HomeScreen() {
           data={filteredTopics}
           keyExtractor={(item) => `topic-${item.id}-${item.authorId}`}
           renderItem={({ item }) => (
-            <TopicCard 
-              topic={item} 
+            <TopicCard
+              topic={item}
               onLike={handleLikeTopic}
             />
           )}
-          contentContainerStyle={[
-            styles.listContent,
-            // Add padding top when header is not visible to prevent content jump
-            !isHeaderVisible && { paddingTop: 12 }
-          ]}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
               colors={[colors.primary]}
               tintColor={colors.primary}
-              progressViewOffset={isHeaderVisible ? HEADER_MAX_HEIGHT : 0}
+              progressViewOffset={HEADER_MAX_HEIGHT}
             />
           }
           onScroll={handleScroll}
@@ -330,7 +255,7 @@ export default function HomeScreen() {
           }
         />
       )}
-      
+
       {/* Sort Menu */}
       <FilterMenu
         visible={sortMenuVisible}
@@ -340,7 +265,7 @@ export default function HomeScreen() {
         selectedValue={filter.sort}
         onSelect={handleSortSelect}
       />
-      
+
       {/* Filter Menu */}
       <FilterMenu
         visible={filterMenuVisible}
@@ -361,16 +286,14 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     backgroundColor: colors.background,
-    zIndex: 10,
-  },
-  header: {
     paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingVertical: 8,
+    zIndex: 10,
   },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 6,
   },
   locationText: {
     fontSize: 13,
@@ -378,24 +301,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginLeft: 4,
   },
+  // 欢迎语和过滤器在同一行
+  greetingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between', // 使欢迎语和过滤器分居两侧
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   greeting: {
     fontSize: 22,
     fontWeight: '700',
     color: colors.text,
-    marginTop: 4,
+    flex: 1, // 让欢迎语占据左侧空间
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 4,
-  },
-  searchBarWrapper: {
-    width: '100%',
-  },
-  filtersRow: {
+  // 过滤器和排序按钮容器
+  filtersContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-    marginTop: 4,
+    alignItems: 'center',
   },
   filterButton: {
     flexDirection: 'row',
@@ -406,6 +328,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
+    marginRight: 8,
   },
   filterText: {
     fontSize: 13,
@@ -426,6 +349,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     marginRight: 4,
+  },
+  // 搜索框单独占一行
+  searchContainer: {
+    marginBottom: 4,
   },
   listContent: {
     padding: 12,
