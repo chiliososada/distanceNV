@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  ScrollView, 
-  Image, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Image,
   RefreshControl,
   ActivityIndicator,
   Alert
@@ -13,12 +13,12 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { 
-  Settings, 
-  Edit, 
-  MapPin, 
-  Calendar, 
-  Users, 
+import {
+  Settings,
+  Edit,
+  MapPin,
+  Calendar,
+  Users,
   MessageSquare,
   Share2,
   Heart,
@@ -43,35 +43,35 @@ import { Topic } from '@/types/topic';
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, isInitializing } = useAuthStore();
-  const { 
-    fetchUserTopics, 
+  const {
+    fetchUserTopics,
     fetchLikedTopics,
-    userTopics, 
+    userTopics,
     likedTopics,
     isLoading: isTopicsLoading,
     isLikedTopicsLoading,
     deleteTopic,
     likeTopic
   } = useTopicStore();
-  
+
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('topics');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [qrCodeVisible, setQrCodeVisible] = useState(false);
-  
+
   useEffect(() => {
     if (user) {
       fetchUserTopics(user.id);
     }
   }, [user]);
-  
+
   // Fetch liked topics when the likes tab is selected
   useEffect(() => {
     if (user && activeTab === 'likes') {
       fetchLikedTopics(user.id);
     }
   }, [user, activeTab]);
-  
+
   const handleRefresh = async () => {
     setRefreshing(true);
     if (user) {
@@ -83,31 +83,34 @@ export default function ProfileScreen() {
     }
     setRefreshing(false);
   };
-  
+
   const handleEditProfile = () => {
     router.push('/profile/edit');
   };
-  
+
   const handleSettings = () => {
     router.push('/settings');
   };
-  
+
   const handleCreateTopic = () => {
     router.push('/create');
   };
-  
+
   const handleTopicPress = (topicId: string) => {
     router.push(`/topic/${topicId}`);
   };
-  
+
   const handleEditTopic = (topicId: string) => {
     router.push({
       pathname: '/create',
-      params: { topicId }
+      params: {
+        topicId,
+        sourceScreen: 'profile'  // 添加来源标记
+      }
     });
     setSelectedTopic(null);
   };
-  
+
   const handleDeleteTopic = (topicId: string) => {
     Alert.alert(
       "Delete Topic",
@@ -135,19 +138,19 @@ export default function ProfileScreen() {
       ]
     );
   };
-  
+
   const handleLikeTopic = (topicId: string) => {
     likeTopic(topicId);
   };
-  
+
   const toggleTopicOptions = (topicId: string) => {
     setSelectedTopic(selectedTopic === topicId ? null : topicId);
   };
-  
+
   const showQRCode = () => {
     setQrCodeVisible(true);
   };
-  
+
   if (isInitializing) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -155,7 +158,7 @@ export default function ProfileScreen() {
       </SafeAreaView>
     );
   }
-  
+
   if (!user) {
     return (
       <SafeAreaView style={styles.container}>
@@ -163,45 +166,45 @@ export default function ProfileScreen() {
           <Text style={styles.notLoggedInText}>
             Please log in to view your profile
           </Text>
-          <Button 
-            title="Log In" 
-            onPress={() => router.push('/login')} 
+          <Button
+            title="Log In"
+            onPress={() => router.push('/login')}
             style={styles.loginButton}
           />
         </View>
       </SafeAreaView>
     );
   }
-  
+
   const renderTopicItem = (item: Topic, index: number, showOptions: boolean = true) => (
     <View key={`profile-topic-${item.id}-${index}`} style={styles.topicItemContainer}>
-      <TopicCard 
-        topic={item} 
+      <TopicCard
+        topic={item}
         onPress={() => handleTopicPress(item.id)}
         showDistance={false}
         onLike={() => handleLikeTopic(item.id)}
       />
-      
+
       {showOptions && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.topicOptionsButton}
           onPress={() => toggleTopicOptions(item.id)}
         >
           <MoreHorizontal size={20} color={colors.text} />
         </TouchableOpacity>
       )}
-      
+
       {showOptions && selectedTopic === item.id && (
         <View style={styles.topicOptionsMenu}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.topicOptionItem}
             onPress={() => handleEditTopic(item.id)}
           >
             <PenLine size={18} color={colors.text} />
             <Text style={styles.topicOptionText}>Edit</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.topicOptionItem}
             onPress={() => handleDeleteTopic(item.id)}
           >
@@ -212,12 +215,12 @@ export default function ProfileScreen() {
       )}
     </View>
   );
-  
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
-      <Stack.Screen 
+
+      <Stack.Screen
         options={{
           headerTitle: 'Profile',
           headerRight: () => (
@@ -225,9 +228,9 @@ export default function ProfileScreen() {
               <Settings size={24} color={colors.text} />
             </TouchableOpacity>
           ),
-        }} 
+        }}
       />
-      
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -241,43 +244,43 @@ export default function ProfileScreen() {
       >
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <Avatar 
-              source={user.avatar} 
-              name={user.displayName} 
-              size="large" 
+            <Avatar
+              source={user.avatar}
+              name={user.displayName}
+              size="large"
             />
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.editButton}
               onPress={handleEditProfile}
             >
               <Edit size={16} color="white" />
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.profileInfo}>
             <View style={styles.nameContainer}>
               <Text style={styles.displayName}>{user.displayName}</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.qrCodeButton}
                 onPress={showQRCode}
               >
                 <QrCode size={20} color={colors.primary} />
               </TouchableOpacity>
             </View>
-            
+
             <Text style={styles.username}>@{user.username}</Text>
-            
+
             {user.type === 'business' && (
               <View style={styles.businessBadge}>
                 <Text style={styles.businessBadgeText}>Business</Text>
               </View>
             )}
-            
+
             {user.bio && (
               <Text style={styles.bio}>{user.bio}</Text>
             )}
-            
+
             <View style={styles.profileMetaInfo}>
               {user.location?.address && (
                 <View style={styles.metaItem}>
@@ -285,7 +288,7 @@ export default function ProfileScreen() {
                   <Text style={styles.metaText}>{user.location.address}</Text>
                 </View>
               )}
-              
+
               <View style={styles.metaItem}>
                 <Calendar size={14} color={colors.textSecondary} />
                 <Text style={styles.metaText}>
@@ -295,31 +298,31 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
-        
+
         <View style={styles.statsContainer}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{user.topicsCount || 0}</Text>
             <Text style={styles.statLabel}>Topics</Text>
           </View>
-          
+
           <View style={styles.statDivider} />
-          
+
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{user.followersCount || 0}</Text>
             <Text style={styles.statLabel}>Followers</Text>
           </View>
-          
+
           <View style={styles.statDivider} />
-          
+
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{user.followingCount || 0}</Text>
             <Text style={styles.statLabel}>Following</Text>
           </View>
-          
+
           {user.type === 'business' && (
             <>
               <View style={styles.statDivider} />
-              
+
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{user.viewCount || 0}</Text>
                 <Text style={styles.statLabel}>Views</Text>
@@ -327,9 +330,9 @@ export default function ProfileScreen() {
             </>
           )}
         </View>
-        
+
         <View style={styles.tabsContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
               styles.tabButton,
               activeTab === 'topics' && styles.activeTabButton
@@ -343,8 +346,8 @@ export default function ProfileScreen() {
               Topics
             </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={[
               styles.tabButton,
               activeTab === 'likes' && styles.activeTabButton
@@ -359,12 +362,12 @@ export default function ProfileScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-        
+
         {activeTab === 'topics' && (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Your Topics</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.createButton}
                 onPress={handleCreateTopic}
               >
@@ -372,12 +375,12 @@ export default function ProfileScreen() {
                 <Text style={styles.createButtonText}>Create</Text>
               </TouchableOpacity>
             </View>
-            
+
             {isTopicsLoading ? (
-              <ActivityIndicator 
-                size="large" 
-                color={colors.primary} 
-                style={styles.loadingIndicator} 
+              <ActivityIndicator
+                size="large"
+                color={colors.primary}
+                style={styles.loadingIndicator}
               />
             ) : userTopics && userTopics.length > 0 ? (
               <View style={styles.topicsList}>
@@ -386,27 +389,27 @@ export default function ProfileScreen() {
             ) : (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>You haven't created any topics yet</Text>
-                <Button 
-                  title="Create Your First Topic" 
-                  onPress={handleCreateTopic} 
+                <Button
+                  title="Create Your First Topic"
+                  onPress={handleCreateTopic}
                   style={styles.emptyButton}
                 />
               </View>
             )}
           </>
         )}
-        
+
         {activeTab === 'likes' && (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Liked Topics</Text>
             </View>
-            
+
             {isLikedTopicsLoading ? (
-              <ActivityIndicator 
-                size="large" 
-                color={colors.primary} 
-                style={styles.loadingIndicator} 
+              <ActivityIndicator
+                size="large"
+                color={colors.primary}
+                style={styles.loadingIndicator}
               />
             ) : likedTopics && likedTopics.length > 0 ? (
               <View style={styles.topicsList}>
@@ -419,9 +422,9 @@ export default function ProfileScreen() {
                 <Text style={styles.emptySubtext}>
                   Topics you like will appear here
                 </Text>
-                <Button 
-                  title="Explore Topics" 
-                  onPress={() => router.push('/')} 
+                <Button
+                  title="Explore Topics"
+                  onPress={() => router.push('/')}
                   style={styles.emptyButton}
                 />
               </View>
@@ -429,7 +432,7 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
-      
+
       {user && (
         <ProfileQRCode
           user={user}

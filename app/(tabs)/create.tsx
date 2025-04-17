@@ -77,12 +77,18 @@ export default function CreateScreen() {
   const [showExpirationModal, setShowExpirationModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoadingTopic, setIsLoadingTopic] = useState(false);
+  const [sourceScreen, setSourceScreen] = useState<string | null>(null);
 
   // Load topic data if in edit mode
   useEffect(() => {
     if (topicId) {
       setIsEditMode(true);
       loadTopicData(topicId);
+
+      // 获取来源页面参数
+      if (params.sourceScreen) {
+        setSourceScreen(params.sourceScreen as string);
+      }
     } else {
       // Reset all fields when not in edit mode
       setTitle('');
@@ -93,6 +99,7 @@ export default function CreateScreen() {
       setExpiresAt(undefined);
       setSelectedExpirationOption(null);
       setIsEditMode(false);
+      setSourceScreen(null);
       checkLocationPermission();
     }
 
@@ -101,7 +108,7 @@ export default function CreateScreen() {
       // Clear currentTopic in the store when leaving this screen
       useTopicStore.setState({ currentTopic: null });
     };
-  }, [topicId]);
+  }, [topicId, params.sourceScreen]);
 
   const loadTopicData = async (id: string) => {
     setIsLoadingTopic(true);
@@ -317,8 +324,12 @@ export default function CreateScreen() {
       // Clear the current topic to prevent data persistence issues
       useTopicStore.setState({ currentTopic: null });
 
-      // Just go back to previous screen regardless of edit mode
-      router.back();
+      // 根据来源页面决定返回路径
+      if (sourceScreen === 'profile') {
+        router.push('/profile');
+      } else {
+        router.back();
+      }
     } catch (error) {
       console.error('Error saving topic:', error);
       Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} topic. Please try again.`);
@@ -326,7 +337,12 @@ export default function CreateScreen() {
   };
 
   const handleBack = () => {
-    router.back();
+    // 如果是从 profile 页面来的，返回 profile 页面
+    if (sourceScreen === 'profile') {
+      router.push('/profile');
+    } else {
+      router.back();
+    }
   };
 
   if (isLoadingTopic) {
