@@ -12,33 +12,32 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Mail, Lock, ArrowLeft, ArrowRight, CheckCircle, XCircle } from 'lucide-react-native';
+import { Mail, Lock, CheckCircle, XCircle } from 'lucide-react-native';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { colors } from '@/constants/colors';
-import { useAuthStore } from '@/store/auth-store';
+import FirebaseAuthService from '@/services/firebase-auth-service';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { register, isLoading, error } = useAuthStore();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Validation states
+  // 验证状态
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
-  // Email validation
+  // 验证邮箱
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email) {
-      setEmailError('Email is required');
+      setEmailError('邮箱地址不能为空');
       return false;
     } else if (!emailRegex.test(email)) {
-      setEmailError('Please enter a valid email address');
+      setEmailError('请输入有效的邮箱地址');
       return false;
     } else {
       setEmailError('');
@@ -46,22 +45,22 @@ export default function RegisterScreen() {
     }
   };
 
-  // Password validation
+  // 验证密码
   const validatePassword = (password: string) => {
     if (!password) {
-      setPasswordError('Password is required');
+      setPasswordError('密码不能为空');
       return false;
     } else if (password.length < 8) {
-      setPasswordError('Password must be at least 8 characters long');
+      setPasswordError('密码长度至少为8个字符');
       return false;
     } else if (!/[A-Z]/.test(password)) {
-      setPasswordError('Password must contain at least one uppercase letter');
+      setPasswordError('密码必须包含至少一个大写字母');
       return false;
     } else if (!/[0-9]/.test(password)) {
-      setPasswordError('Password must contain at least one number');
+      setPasswordError('密码必须包含至少一个数字');
       return false;
     } else if (!/[!@#$%^&*]/.test(password)) {
-      setPasswordError('Password must contain at least one special character (!@#$%^&*)');
+      setPasswordError('密码必须包含至少一个特殊字符 (!@#$%^&*)');
       return false;
     } else {
       setPasswordError('');
@@ -69,13 +68,13 @@ export default function RegisterScreen() {
     }
   };
 
-  // Confirm password validation
+  // 验证确认密码
   const validateConfirmPassword = (confirmPwd: string) => {
     if (!confirmPwd) {
-      setConfirmPasswordError('Please confirm your password');
+      setConfirmPasswordError('请确认您的密码');
       return false;
     } else if (confirmPwd !== password) {
-      setConfirmPasswordError('Passwords do not match');
+      setConfirmPasswordError('两次输入的密码不一致');
       return false;
     } else {
       setConfirmPasswordError('');
@@ -84,7 +83,7 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    // Validate all fields
+    // 验证所有字段
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
     const isConfirmPasswordValid = validateConfirmPassword(confirmPassword);
@@ -93,27 +92,28 @@ export default function RegisterScreen() {
       return;
     }
 
-    try {
-      // In a real app, you would send the data to your backend
-      // Here we're just using the mock register function
-      await register({
-        email,
-        password
-      });
+    setIsLoading(true);
 
-      // 修复的路由导航
+    try {
+      // 使用Firebase注册
+      await FirebaseAuthService.registerUser(email, password);
+
+      // 注册成功，导航到验证邮箱页面
       router.push({
         pathname: '/(auth)/verify-email',
         params: { email }
       });
-    } catch (error) {
-      console.error('Registration error:', error);
+    } catch (error: any) {
+      console.error('注册错误:', error);
+      Alert.alert('注册失败', error.message || '注册过程中出现错误，请重试');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // const handleBack = () => {
-  //   router.back();
-  // };
+  const handleLogin = () => {
+    router.push('/(auth)/login');
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -127,7 +127,6 @@ export default function RegisterScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-
           <View style={styles.header}>
             <Text style={styles.title}>创建账户</Text>
             <Text style={styles.subtitle}>注册以连接社区</Text>
@@ -180,7 +179,7 @@ export default function RegisterScreen() {
               error={confirmPasswordError}
             />
 
-            {/* Password requirements section */}
+            {/* 密码要求部分 */}
             <View style={styles.passwordRequirements}>
               <Text style={styles.requirementsTitle}>密码必须包含：</Text>
               <View style={styles.requirement}>
@@ -237,17 +236,11 @@ export default function RegisterScreen() {
               </View>
             </View>
 
-            {error && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
-
             <Button
               title="创建账户"
               onPress={handleRegister}
               loading={isLoading}
               fullWidth
-              icon={<ArrowRight size={20} color="white" />}
-              iconPosition="right"
             />
           </View>
 
@@ -255,7 +248,12 @@ export default function RegisterScreen() {
             注册即表示您同意我们的服务条款和隐私政策
           </Text>
 
-
+          <View style={styles.loginPrompt}>
+            <Text style={styles.loginText}>已有账户？</Text>
+            <TouchableOpacity onPress={handleLogin}>
+              <Text style={styles.loginLink}>登录</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -273,9 +271,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 24,
-  },
-  backButton: {
-    marginBottom: 16,
   },
   header: {
     marginBottom: 32,
@@ -318,11 +313,6 @@ const styles = StyleSheet.create({
   },
   requirementMet: {
     color: colors.success,
-  },
-  errorText: {
-    color: colors.error,
-    marginBottom: 16,
-    fontSize: 14,
   },
   termsText: {
     fontSize: 12,

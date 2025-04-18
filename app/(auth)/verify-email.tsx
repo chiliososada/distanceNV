@@ -18,11 +18,6 @@ export default function VerifyEmailScreen() {
     const { email } = useLocalSearchParams();
     const decodedEmail = email ? decodeURIComponent(email as string) : '';
 
-    const handleResendEmail = () => {
-        // In a real app, you would call an API to resend verification email
-        alert('验证邮件已重新发送。');
-    };
-
     const handleBackToLogin = () => {
         router.replace('/(auth)/login');
     };
@@ -52,19 +47,11 @@ export default function VerifyEmailScreen() {
                     </Text>
                     <Text style={styles.emailText}>{decodedEmail}</Text>
                     <Text style={styles.instructions}>
-                        请检查您的邮箱并点击验证链接完成注册。
+                        请检查您的邮箱并点击验证链接完成注册。验证完成后，您将可以登录应用。
                     </Text>
                 </View>
 
                 <View style={styles.buttonsContainer}>
-                    <Button
-                        title="重新发送邮件"
-                        onPress={handleResendEmail}
-                        variant="outline"
-                        fullWidth
-                        style={styles.button}
-                    />
-
                     <Button
                         title="返回登录"
                         onPress={handleBackToLogin}
@@ -78,7 +65,7 @@ export default function VerifyEmailScreen() {
                     <Text style={styles.helpText}>
                         • 检查您的垃圾邮件或垃圾箱{'\n'}
                         • 确认 {decodedEmail} 是否正确{'\n'}
-                        • 尝试重新发送验证邮件
+                        • 稍后您可以在登录页面选择"忘记密码"重新获取验证邮件
                     </Text>
                 </View>
             </ScrollView>
