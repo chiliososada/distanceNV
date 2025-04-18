@@ -2,6 +2,7 @@
 import { AppState, AppStateStatus, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import EventEmitter from '@/utils/event-emitter';
+import { useAuthStore } from '@/store/auth-store';
 
 export type AppStateType = 'active' | 'background' | 'inactive' | 'unknown';
 
@@ -30,9 +31,16 @@ class AppStateService {
         if (nextAppState === 'active' && this.currentState !== 'active') {
             await AsyncStorage.setItem(LAST_ACTIVE_TIME_KEY, Date.now().toString());
 
+            // 检查会话超时
             const needsReauthentication = await this.checkSessionTimeout();
 
-            EventEmitter.emit('APP_ACTIVE', { needsReauthentication });
+            // 检查会话状态
+            const isSessionValid = await this.checkSession();
+
+            EventEmitter.emit('APP_ACTIVE', {
+                needsReauthentication,
+                isSessionValid
+            });
         }
         // 进入后台
         else if ((nextAppState === 'background' || nextAppState === 'inactive') &&
@@ -44,6 +52,17 @@ class AppStateService {
 
         this.currentState = nextAppState as AppStateType;
     };
+
+    private async checkSession(): Promise<boolean> {
+        try {
+            // 访问auth store检查会话状态
+            const checkSession = useAuthStore.getState().checkSession;
+            return await checkSession();
+        } catch (error) {
+            console.error('检查会话状态出错:', error);
+            return false;
+        }
+    }
 
     private async checkSessionTimeout(): Promise<boolean> {
         try {

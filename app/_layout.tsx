@@ -33,10 +33,10 @@ export default function RootLayout() {
       console.log('应用回到前台', data);
 
       // 如果会话超时需要重新登录
-      if (data?.needsReauthentication && isAuthenticated) {
+      if ((data?.needsReauthentication || !data?.isSessionValid) && isAuthenticated) {
         Alert.alert(
           '会话已过期',
-          '由于长时间未活动，请重新登录',
+          '您的登录已过期，请重新登录',
           [
             {
               text: '确定',

@@ -49,6 +49,19 @@ export default function AuthLayout() {
           headerShown: false, // Hide the header for this screen
         }}
       />
+      <Stack.Screen
+        name="profile/complete"
+        options={{
+          headerShown: true,
+          title: "完善资料",
+          // 防止用户通过返回按钮跳过资料完善
+          headerBackVisible: false,
+          // 阻止手势返回
+          gestureEnabled: false
+        }}
+      />
+
     </Stack>
+
   );
 }
