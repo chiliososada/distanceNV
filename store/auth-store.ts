@@ -130,17 +130,35 @@ export const useAuthStore = create<AuthStore>()(
           // 调用后端API获取用户资料
           const userData = await ApiService.login(token);
 
+          console.log("后端返回的用户资料:", userData);
           // 保存token和用户信息
           ApiService.setToken(token);
 
           // 检查资料是否完整
-          const isProfileComplete = !!userData.displayName;
+          const isProfileComplete = !!(userData.display_name && userData.display_name.trim() !== '');
+
+          console.log("个人资料是否完整:", isProfileComplete);
 
           set({
-            user: userData,
+            user: {
+              id: userData.uid,
+              email: userData.email,
+              displayName: userData.display_name || '',
+              avatar: userData.photo_url || '',
+              username: userData.email.split('@')[0] || '',
+              bio: userData.bio || '',
+              type: 'person',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              followersCount: 0,
+              followingCount: 0,
+              topicsCount: 0,
+              likesCount: 0,
+              lastActiveAt: new Date().toISOString(),
+            },
             isAuthenticated: true,
             token: token,
-            isProfileComplete,
+            isProfileComplete: isProfileComplete,  // 确保正确设置这个值
             isLoading: false
           });
         } catch (error: any) {
@@ -192,14 +210,60 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
+      // updateProfile: async (data: Partial<User>) => {
+      //   set({ isLoading: true, error: null });
+      //   try {
+      //     // 调用API更新资料
+      //     // 在真实应用中，您需要实现API服务中的updateProfile方法
+      //     // const updatedUser = await ApiService.updateProfile(data);
+
+      //     // 临时模拟API响应
+      //     const currentUser = get().user;
+      //     if (!currentUser) {
+      //       throw new Error("用户未登录");
+      //     }
+
+      //     const updatedUser = {
+      //       ...currentUser,
+      //       ...data,
+      //       updatedAt: new Date().toISOString()
+      //     };
+
+      //     const isProfileComplete = !!updatedUser.displayName;
+
+      //     set({
+      //       user: updatedUser,
+      //       isProfileComplete,
+      //       isLoading: false
+      //     });
+      //   } catch (error: any) {
+      //     set({
+      //       error: error.message || "更新资料失败",
+      //       isLoading: false
+      //     });
+      //   }
+      // },
       updateProfile: async (data: Partial<User>) => {
         set({ isLoading: true, error: null });
         try {
-          // 调用API更新资料
-          // 在真实应用中，您需要实现API服务中的updateProfile方法
-          // const updatedUser = await ApiService.updateProfile(data);
+          // 转换数据格式为API要求的格式
+          const profileData = {
+            email: get().user?.email || '', // 确保有email
+            nickname: data.displayName,     // displayName对应后端的nickname
+            bio: data.bio,
+            gender: data.gender,            // 需要确保前端的gender格式与后端一致
+            avatar_url: data.avatar         // avatar对应后端的avatar_url
+          };
 
-          // 临时模拟API响应
+          // 调用API更新资料
+          const response = await ApiService.updateProfile(profileData);
+
+          // 检查响应是否成功
+          if (response.code !== 0 || response.message !== "success") {
+            throw new Error(response.message || "更新资料失败");
+          }
+
+          // 更新本地用户数据
           const currentUser = get().user;
           if (!currentUser) {
             throw new Error("用户未登录");
@@ -211,18 +275,23 @@ export const useAuthStore = create<AuthStore>()(
             updatedAt: new Date().toISOString()
           };
 
-          const isProfileComplete = !!updatedUser.displayName;
+          // 判断资料是否完整
+          const isProfileComplete = !!(updatedUser.displayName && updatedUser.displayName.trim() !== '');
 
           set({
             user: updatedUser,
             isProfileComplete,
             isLoading: false
           });
+
+          return response.data;
         } catch (error: any) {
+          console.error("更新资料失败:", error);
           set({
             error: error.message || "更新资料失败",
             isLoading: false
           });
+          throw error;
         }
       },
 

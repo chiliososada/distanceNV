@@ -29,6 +29,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (isAuthenticated) {
+      console.log("登录成功，资料完整性:", isProfileComplete);
       // 检查用户资料是否完整
       if (!isProfileComplete) {
         // 资料不完整，跳转到资料完善页面

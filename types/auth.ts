@@ -37,6 +37,8 @@ export interface User {
   displayName: string;
   bio?: string;
   avatar?: string;
+  // 添加新字段
+  gender?: 'male' | 'female' | 'other';
   location?: Location;
   createdAt: string;
   updatedAt: string;

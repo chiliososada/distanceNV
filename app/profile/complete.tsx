@@ -1,4 +1,5 @@
 // app/profile/complete.tsx
+
 import React, { useState } from 'react';
 import {
     StyleSheet,
@@ -18,7 +19,6 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, User } from 'lucide-react-native';
 import { Button } from '@/components/Button';
-import { Input } from '@/components/Input';
 import { colors } from '@/constants/colors';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -30,6 +30,7 @@ export default function CompleteProfileScreen() {
     const [username, setUsername] = useState(user?.username || '');
     const [bio, setBio] = useState(user?.bio || '');
     const [avatar, setAvatar] = useState<string | undefined>(user?.avatar);
+    const [gender, setGender] = useState<'male' | 'female' | 'other'>(user?.gender as any || 'other');
 
     const handlePickImage = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -50,8 +51,8 @@ export default function CompleteProfileScreen() {
             return;
         }
 
-        if (!username.trim()) {
-            Alert.alert('错误', '请输入用户名');
+        if (displayName.trim().length < 2) {
+            Alert.alert('错误', '显示名称至少需要2个字符');
             return;
         }
 
@@ -61,6 +62,7 @@ export default function CompleteProfileScreen() {
                 username,
                 bio,
                 avatar,
+                gender
             });
 
             Alert.alert('成功', '资料已更新', [
@@ -70,6 +72,11 @@ export default function CompleteProfileScreen() {
             console.error('更新资料错误:', error);
             Alert.alert('错误', error.message || '更新资料失败，请重试');
         }
+    };
+
+    // 性别选择处理
+    const handleGenderSelection = (selectedGender: 'male' | 'female' | 'other') => {
+        setGender(selectedGender);
     };
 
     return (
@@ -114,22 +121,54 @@ export default function CompleteProfileScreen() {
                     </View>
 
                     <View style={styles.form}>
-                        <Input
-                            label="显示名称"
-                            placeholder="您希望别人如何称呼您"
-                            value={displayName}
-                            onChangeText={setDisplayName}
-                            containerStyle={styles.inputContainer}
-                        />
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>显示名称<Text style={styles.required}>*</Text></Text>
+                            <TextInput
+                                style={styles.input}
+                                value={displayName}
+                                onChangeText={setDisplayName}
+                                placeholder="您希望别人如何称呼您"
+                                maxLength={50}
+                                placeholderTextColor={colors.textLight}
+                            />
+                            <Text style={styles.hint}>显示名称需要2-50个字符</Text>
+                        </View>
 
-                        <Input
-                            label="用户名"
-                            placeholder="创建一个唯一的用户名"
-                            value={username}
-                            onChangeText={setUsername}
-                            autoCapitalize="none"
-                            containerStyle={styles.inputContainer}
-                        />
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>用户名</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={username}
+                                onChangeText={setUsername}
+                                placeholder="创建一个唯一的用户名"
+                                autoCapitalize="none"
+                                placeholderTextColor={colors.textLight}
+                            />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.label}>性别</Text>
+                            <View style={styles.genderContainer}>
+                                <TouchableOpacity
+                                    style={[styles.genderOption, gender === 'male' && styles.selectedGender]}
+                                    onPress={() => handleGenderSelection('male')}
+                                >
+                                    <Text style={[styles.genderText, gender === 'male' && styles.selectedGenderText]}>男</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.genderOption, gender === 'female' && styles.selectedGender]}
+                                    onPress={() => handleGenderSelection('female')}
+                                >
+                                    <Text style={[styles.genderText, gender === 'female' && styles.selectedGenderText]}>女</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.genderOption, gender === 'other' && styles.selectedGender]}
+                                    onPress={() => handleGenderSelection('other')}
+                                >
+                                    <Text style={[styles.genderText, gender === 'other' && styles.selectedGenderText]}>其他</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
 
                         <View style={styles.bioContainer}>
                             <Text style={styles.label}>个人简介</Text>
@@ -142,7 +181,9 @@ export default function CompleteProfileScreen() {
                                 multiline
                                 numberOfLines={4}
                                 textAlignVertical="top"
+                                maxLength={500}
                             />
+                            <Text style={styles.hint}>{bio?.length || 0}/500</Text>
                         </View>
                     </View>
 
@@ -225,14 +266,30 @@ const styles = StyleSheet.create({
     inputContainer: {
         marginBottom: 16,
     },
+    label: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: colors.text,
+        marginBottom: 8,
+    },
+    required: {
+        color: colors.error,
+    },
+    input: {
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        color: colors.text,
+    },
+    hint: {
+        fontSize: 12,
+        color: colors.textSecondary,
+        marginTop: 4,
+    },
     bioContainer: {
         marginBottom: 16,
-    },
-    label: {
-        fontSize: 14,
-        marginBottom: 6,
-        color: colors.text,
-        fontWeight: '500',
     },
     bioInput: {
         borderWidth: 1,
@@ -241,7 +298,32 @@ const styles = StyleSheet.create({
         padding: 12,
         fontSize: 16,
         color: colors.text,
-        height: 100,
+        height: 120,
+    },
+    genderContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    genderOption: {
+        flex: 1,
+        marginHorizontal: 4,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+    },
+    selectedGender: {
+        backgroundColor: colors.primaryLight,
+        borderColor: colors.primary,
+    },
+    genderText: {
+        fontSize: 16,
+        color: colors.text,
+    },
+    selectedGenderText: {
+        color: colors.primary,
+        fontWeight: '600',
     },
     saveButton: {
         marginTop: 8,

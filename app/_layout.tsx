@@ -12,7 +12,7 @@ import AppStateService from '@/services/app-state-service';
 import EventEmitter from '@/utils/event-emitter';
 
 export default function RootLayout() {
-  const { isInitializing, initializeAuth, isAuthenticated, logout } = useAuthStore();
+  const { isInitializing, initializeAuth, isAuthenticated, logout, isProfileComplete } = useAuthStore();
   const { translate } = useLanguageStore();
   const colorScheme = useColorScheme();
   const segments = useSegments();
@@ -69,15 +69,37 @@ export default function RootLayout() {
     if (isInitializing) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    // 检查是否在个人资料完善页面
+    const inProfileCompletePage = segments[0] === 'profile' && segments[1] === 'complete';
+
+    console.log("路由状态检查:", {
+      isAuthenticated,
+      isProfileComplete,
+      inAuthGroup,
+      inProfileCompletePage,
+      segments
+    });
 
     if (!isAuthenticated && !inAuthGroup) {
-      // Redirect to login if not authenticated and not already in auth group
+      // 未登录且不在认证页面，重定向到登录
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
-      // Redirect to home if authenticated but still in auth group
-      router.replace('/');
+    } else if (isAuthenticated) {
+      if (inAuthGroup) {
+        // 已登录但在认证页面
+        if (!isProfileComplete) {
+          // 若资料不完整，重定向到资料完善页面
+          router.replace('/profile/complete');
+        } else {
+          // 资料完整，重定向到主页
+          router.replace('/');
+        }
+      } else if (!isProfileComplete && !inProfileCompletePage) {
+        // 已登录、资料不完整、不在完善页面，重定向到资料完善页面
+        router.replace('/profile/complete');
+      }
+      // 其他情况不做处理（已登录、资料完整，或已在完善页面）
     }
-  }, [isAuthenticated, segments, isInitializing]);
+  }, [isAuthenticated, segments, isInitializing, isProfileComplete]);
 
   const [loaded] = useFonts({
     // You can add custom fonts here if needed
@@ -108,6 +130,12 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="profile/complete" options={{
+          headerShown: true,
+          title: '完善个人资料',
+          headerBackVisible: false, // 防止用户通过返回按钮跳过资料完善
+          gestureEnabled: false // 禁用手势返回
+        }} />
         <Stack.Screen name="topic/[id]" options={{ headerShown: true, title: translate('topics') }} />
         <Stack.Screen name="profile/[id]" options={{ headerShown: true, title: translate('profile') }} />
         <Stack.Screen name="profile/edit" options={{ headerShown: true, title: translate('editProfile') }} />
