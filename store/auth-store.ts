@@ -138,7 +138,7 @@ export const useAuthStore = create<AuthStore>()(
           const isProfileComplete = !!(userData.display_name && userData.display_name.trim() !== '');
 
           console.log("个人资料是否完整:", isProfileComplete);
-
+          // 设置用户全部数据
           set({
             user: {
               id: userData.uid,
@@ -147,7 +147,7 @@ export const useAuthStore = create<AuthStore>()(
               avatar: userData.photo_url || '',
               username: userData.email.split('@')[0] || '',
               bio: userData.bio || '',
-              type: 'person',
+              type: 'person',//从数居裤获取UserType
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               followersCount: 0,
