@@ -240,7 +240,7 @@ export default function RegisterScreen() {
               title="创建账户"
               onPress={handleRegister}
               loading={isLoading}
-              fullWidth
+            //fullWidth
             />
           </View>
 

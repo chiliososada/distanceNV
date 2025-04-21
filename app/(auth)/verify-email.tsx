@@ -55,7 +55,7 @@ export default function VerifyEmailScreen() {
                     <Button
                         title="返回登录"
                         onPress={handleBackToLogin}
-                        fullWidth
+                        //fullWidth
                         style={styles.button}
                     />
                 </View>

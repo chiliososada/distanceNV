@@ -191,7 +191,7 @@ export default function CompleteProfileScreen() {
                         title="保存并继续"
                         onPress={handleSave}
                         loading={isLoading}
-                        fullWidth
+                        //fullWidth
                         style={styles.saveButton}
                     />
                 </ScrollView>

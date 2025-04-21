@@ -156,7 +156,7 @@ export default function LoginScreen() {
               title="登录"
               onPress={handleLogin}
               loading={isLoading}
-              fullWidth
+              //fullWidth
               style={styles.loginButton}
             />
           </View>

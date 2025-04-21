@@ -557,7 +557,7 @@ export default function CreateScreen() {
           title={isEditMode ? "Update Topic" : "Post Topic"}
           onPress={handleSubmit}
           loading={isLoading}
-          fullWidth
+          //fullWidth
           disabled={!location || !title.trim() || !content.trim()}
         />
       </View>

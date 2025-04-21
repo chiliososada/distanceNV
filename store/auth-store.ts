@@ -138,7 +138,7 @@ export const useAuthStore = create<AuthStore>()(
           const isProfileComplete = !!(userData.display_name && userData.display_name.trim() !== '');
 
           console.log("个人资料是否完整:", isProfileComplete);
-          // 设置用户全部数据
+          // 设置用户全部数据 接口还需要完善
           set({
             user: {
               id: userData.uid,
