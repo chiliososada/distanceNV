@@ -1,267 +1,76 @@
+// store/topic-store.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Topic, CreateTopicPayload, TopicFilter } from '@/types/topic';
+import { Topic, CreateTopicPayload, TopicFilter, ApiTopic } from '@/types/topic';
 import { useAuthStore } from './auth-store';
+import TopicService from '@/services/topic-service';
+import { getFirebaseImageUrls } from '@/utils/firebase-storage';
 
-// Mock topics for demo
-const mockTopics: Topic[] = [
-  {
-    id: '1',
-    title: 'Best coffee shops in downtown',
-    content: "I'm looking for recommendations on coffee shops with good wifi for working remotely. Any suggestions?",
+// 将 API 返回的话题数据转换为应用使用的格式
+const convertApiTopicToTopic = async (apiTopic: ApiTopic, currentUserId?: string): Promise<Topic> => {
+  // 获取 Firebase 存储中的图片 URL
+  const imageUrls = await getFirebaseImageUrls(apiTopic.topic_images);
+
+  // 创建应用使用的话题对象
+  return {
+    id: apiTopic.uid,
+    title: apiTopic.title,
+    content: apiTopic.content,
     author: {
-      id: '1',
-      email: 'john@example.com',
-      username: 'johndoe',
-      displayName: 'John Doe',
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-      createdAt: new Date(2023, 1, 15).toISOString(),
-      updatedAt: new Date(2023, 5, 20).toISOString(),
-      followersCount: 245,
-      followingCount: 178,
-      topicsCount: 32,
-      type: 'person',
-      likesCount: 120,
-      lastActiveAt: new Date(2023, 6, 10).toISOString(),
+      id: apiTopic.user_uid,
+      type: 'person', // 默认为个人用户
+      email: '', // API 未提供邮箱
+      username: apiTopic.user_uid, // 使用用户 ID 作为用户名
+      displayName: apiTopic.user.nickname || '未知用户',
+      bio: '',
+      avatar: apiTopic.user.avatar_url,
+      gender: apiTopic.user.gender as any,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      followersCount: 0,
+      followingCount: 0,
+      topicsCount: 0,
+      likesCount: 0,
+      lastActiveAt: new Date().toISOString(),
     },
-    authorId: '1',
-    images: [
-      'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb',
-      'https://images.unsplash.com/photo-1554118811-1e0d58224f24',
-    ],
-    tags: ['coffee', 'work', 'wifi'],
+    authorId: apiTopic.user_uid,
+    images: imageUrls,
+    tags: apiTopic.tags || [],
     location: {
-      latitude: 37.7749,
-      longitude: -122.4194,
-      address: 'Union Square, San Francisco, CA',
+      latitude: apiTopic.location_latitude,
+      longitude: apiTopic.location_longitude,
+      address: '', // API 未提供地址信息
     },
-    distance: 0.5,
-    createdAt: new Date(2023, 6, 15).toISOString(),
-    updatedAt: new Date(2023, 6, 15).toISOString(),
-    likesCount: 24,
-    commentsCount: 8,
-    isLiked: false,
-  },
-  {
-    id: '2',
-    title: 'Hiking trail recommendations',
-    content: "Planning a weekend hike. What are some good trails within 30 minutes of the city?",
-    author: {
-      id: '2',
-      email: 'jane@example.com',
-      username: 'janesmith',
-      displayName: 'Jane Smith',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-      createdAt: new Date(2023, 2, 10).toISOString(),
-      updatedAt: new Date(2023, 6, 5).toISOString(),
-      followersCount: 532,
-      followingCount: 215,
-      topicsCount: 47,
-      type: 'person',
-      likesCount: 350,
-      lastActiveAt: new Date(2023, 6, 12).toISOString(),
-    },
-    authorId: '2',
-    images: [
-      'https://images.unsplash.com/photo-1551632811-561732d1e306',
-      'https://images.unsplash.com/photo-1527201987695-67c06571957e',
-    ],
-    tags: ['hiking', 'outdoors', 'weekend'],
-    location: {
-      latitude: 37.8199,
-      longitude: -122.4783,
-      address: 'Golden Gate Park, San Francisco, CA',
-    },
-    distance: 2.3,
-    createdAt: new Date(2023, 6, 14).toISOString(),
-    updatedAt: new Date(2023, 6, 14).toISOString(),
-    likesCount: 42,
-    commentsCount: 15,
-    isLiked: true,
-  },
-  {
-    id: '3',
-    title: 'Food truck festival this weekend',
-    content: "There's a food truck festival happening at the park this weekend. Over 20 different cuisines to try!",
-    author: {
-      id: '1',
-      email: 'john@example.com',
-      username: 'johndoe',
-      displayName: 'John Doe',
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-      createdAt: new Date(2023, 1, 15).toISOString(),
-      updatedAt: new Date(2023, 5, 20).toISOString(),
-      followersCount: 245,
-      followingCount: 178,
-      topicsCount: 32,
-      type: 'person',
-      likesCount: 120,
-      lastActiveAt: new Date(2023, 6, 10).toISOString(),
-    },
-    authorId: '1',
-    images: [
-      'https://images.unsplash.com/photo-1565123409695-7b5ef63a2efb',
-      'https://images.unsplash.com/photo-1555396273-367ea4eb4db5',
-    ],
-    tags: ['food', 'festival', 'weekend'],
-    location: {
-      latitude: 37.7694,
-      longitude: -122.4862,
-      address: 'Golden Gate Park, Conservatory of Flowers, San Francisco, CA',
-    },
-    distance: 1.8,
-    expiresAt: new Date(2023, 6, 18).toISOString(),
-    createdAt: new Date(2023, 6, 13).toISOString(),
-    updatedAt: new Date(2023, 6, 13).toISOString(),
-    likesCount: 67,
-    commentsCount: 23,
-    isLiked: false,
-  },
-  {
-    id: '4',
-    title: 'Tech meetup for mobile developers',
-    content: "Hosting a casual meetup for mobile developers to network and share ideas. All experience levels welcome!",
-    author: {
-      id: '2',
-      email: 'jane@example.com',
-      username: 'janesmith',
-      displayName: 'Jane Smith',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-      createdAt: new Date(2023, 2, 10).toISOString(),
-      updatedAt: new Date(2023, 6, 5).toISOString(),
-      followersCount: 532,
-      followingCount: 215,
-      topicsCount: 47,
-      type: 'person',
-      likesCount: 350,
-      lastActiveAt: new Date(2023, 6, 12).toISOString(),
-    },
-    authorId: '2',
-    images: [
-      'https://images.unsplash.com/photo-1515187029135-18ee286d815b',
-    ],
-    tags: ['tech', 'meetup', 'developers', 'networking'],
-    location: {
-      latitude: 37.7833,
-      longitude: -122.4167,
-      address: 'SoMa, San Francisco, CA',
-    },
-    distance: 3.1,
-    createdAt: new Date(2023, 6, 12).toISOString(),
-    updatedAt: new Date(2023, 6, 12).toISOString(),
-    likesCount: 31,
-    commentsCount: 12,
-    isLiked: false,
-  },
-  {
-    id: '5',
-    title: 'Farmers market this Saturday',
-    content: "The weekly farmers market is happening this Saturday from 8am-1pm. Fresh produce, baked goods, and more!",
-    author: {
-      id: '1',
-      email: 'john@example.com',
-      username: 'johndoe',
-      displayName: 'John Doe',
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-      createdAt: new Date(2023, 1, 15).toISOString(),
-      updatedAt: new Date(2023, 5, 20).toISOString(),
-      followersCount: 245,
-      followingCount: 178,
-      topicsCount: 32,
-      type: 'person',
-      likesCount: 120,
-      lastActiveAt: new Date(2023, 6, 10).toISOString(),
-    },
-    authorId: '1',
-    images: [
-      'https://images.unsplash.com/photo-1488459716781-31db52582fe9',
-      'https://images.unsplash.com/photo-1542838132-92c53300491e',
-    ],
-    tags: ['market', 'food', 'local', 'shopping'],
-    location: {
-      latitude: 37.7749,
-      longitude: -122.4194,
-      address: 'Ferry Building Marketplace, San Francisco, CA',
-    },
-    distance: 1.2,
-    expiresAt: new Date(2023, 6, 17).toISOString(),
-    createdAt: new Date(2023, 6, 11).toISOString(),
-    updatedAt: new Date(2023, 6, 11).toISOString(),
-    likesCount: 45,
-    commentsCount: 8,
-    isLiked: true,
-  },
-];
-
-// Generate more mock topics for pagination demo
-const generateMoreMockTopics = (page: number, pageSize: number = 5): Topic[] => {
-  const startId = mockTopics.length + 1 + (page - 1) * pageSize;
-  const newTopics: Topic[] = [];
-
-  // Sample addresses for generated topics
-  const sampleAddresses = [
-    'Mission District, San Francisco, CA',
-    'North Beach, San Francisco, CA',
-    'Hayes Valley, San Francisco, CA',
-    'Chinatown, San Francisco, CA',
-    'Fisherman\'s Wharf, San Francisco, CA',
-    'Japantown, San Francisco, CA',
-    'Nob Hill, San Francisco, CA',
-    'Russian Hill, San Francisco, CA',
-    'Haight-Ashbury, San Francisco, CA',
-    'Castro District, San Francisco, CA'
-  ];
-
-  for (let i = 0; i < pageSize; i++) {
-    const id = String(startId + i);
-    const authorId = Math.random() > 0.5 ? '1' : '2';
-    const author = mockTopics.find(t => t.authorId === authorId)?.author!;
-    const addressIndex = Math.floor(Math.random() * sampleAddresses.length);
-
-    newTopics.push({
-      id,
-      title: `Generated Topic ${id}`,
-      content: `This is auto-generated content for topic ${id}. Lorem ipsum dolor sit amet, consectetur adipiscing elit.`,
-      author,
-      authorId,
-      images: i % 2 === 0 ? ['https://images.unsplash.com/photo-1523240795612-9a054b0db644'] : [],
-      tags: [`tag${i}`, 'generated', i % 3 === 0 ? 'featured' : 'regular'],
-      location: {
-        latitude: 37.7749 + (Math.random() * 0.1 - 0.05),
-        longitude: -122.4194 + (Math.random() * 0.1 - 0.05),
-        address: sampleAddresses[addressIndex],
-      },
-      distance: Math.random() * 5,
-      createdAt: new Date(2023, 6, 10 - i).toISOString(),
-      updatedAt: new Date(2023, 6, 10 - i).toISOString(),
-      likesCount: Math.floor(Math.random() * 100),
-      commentsCount: Math.floor(Math.random() * 30),
-      isLiked: Math.random() > 0.7,
-    });
-  }
-
-  return newTopics;
+    distance: undefined, // 需要计算
+    expiresAt: apiTopic.expires_at,
+    createdAt: apiTopic.created_at,
+    updatedAt: apiTopic.updated_at,
+    likesCount: apiTopic.likes_count,
+    commentsCount: apiTopic.participants_count,
+    isLiked: false, // 需要从 API 获取
+    chatId: apiTopic.chat_id,
+  };
 };
 
 interface TopicState {
   topics: Topic[];
   filteredTopics: Topic[];
-  userTopics: Topic[]; // Added explicit userTopics array
-  likedTopics: Topic[]; // Added likedTopics array
+  userTopics: Topic[]; // 用户创建的话题
+  likedTopics: Topic[]; // 用户点赞的话题
   currentTopic: Topic | null;
   isLoading: boolean;
-  isLikedTopicsLoading: boolean; // Added loading state for liked topics
+  isLikedTopicsLoading: boolean;
   error: string | null;
   filter: TopicFilter;
-  currentPage: number;
+  currentLastScore: number; // 上次加载的最后分数，用于分页
   hasMoreTopics: boolean;
 }
 
-type TopicStore = TopicState & {
+export interface TopicStore extends TopicState {
   fetchTopics: () => Promise<void>;
   fetchUserTopics: (userId: string) => Promise<void>;
-  fetchLikedTopics: (userId: string) => Promise<void>; // Added function to fetch liked topics
+  fetchLikedTopics: (userId: string) => Promise<void>;
   fetchTopicById: (id: string) => Promise<void>;
   createTopic: (topic: CreateTopicPayload) => Promise<void>;
   updateTopic: (id: string, topic: Partial<CreateTopicPayload>) => Promise<void>;
@@ -270,64 +79,103 @@ type TopicStore = TopicState & {
   setFilter: (filter: Partial<TopicFilter>) => void;
   applyFilters: () => void;
   loadMoreTopics: () => Promise<void>;
-};
+}
 
 export const useTopicStore = create<TopicStore>()(
   persist(
     (set, get) => ({
-      topics: mockTopics,
-      filteredTopics: mockTopics,
-      userTopics: [], // Initialize as empty array
-      likedTopics: [], // Initialize as empty array
+      topics: [],
+      filteredTopics: [],
+      userTopics: [],
+      likedTopics: [],
       currentTopic: null,
       isLoading: false,
-      isLikedTopicsLoading: false, // Initialize as false
+      isLikedTopicsLoading: false,
       error: null,
       filter: {
         sort: 'recent',
       },
-      currentPage: 1,
+      currentLastScore: 0,
       hasMoreTopics: true,
 
       fetchTopics: async () => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 重置分页状态
+          set({ currentLastScore: 0 });
 
-          // In a real app, we would fetch from an API
-          set({
-            topics: mockTopics,
-            filteredTopics: mockTopics,
-            isLoading: false,
-            currentPage: 1,
-            hasMoreTopics: true
+          // 调用 API 获取最新话题
+          const response = await TopicService.findTopics({
+            findby: "recent",
+            max: 10,
+            recency: 0
           });
+
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取话题失败");
+          }
+
+          // 获取当前用户 ID
+          const currentUser = useAuthStore.getState().user;
+          const currentUserId = currentUser?.id;
+
+          // 转换话题格式
+          const promises = response.data.topics.map(apiTopic =>
+            convertApiTopicToTopic(apiTopic, currentUserId)
+          );
+          const topics = await Promise.all(promises);
+
+          // 更新状态
+          set({
+            topics,
+            filteredTopics: topics,
+            currentLastScore: response.data.score,
+            hasMoreTopics: response.data.topics.length >= 10, // 如果返回的数量等于请求的最大数，认为还有更多
+            isLoading: false
+          });
+
+          // 应用过滤
           get().applyFilters();
-        } catch (error) {
-          set({ error: "Failed to fetch topics", isLoading: false });
+        } catch (error: any) {
+          console.error("获取话题失败:", error);
+          set({ error: error.message || "获取话题失败", isLoading: false });
         }
       },
 
       fetchUserTopics: async (userId: string) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 这里应该有一个通过用户 ID 获取话题的 API
+          // 暂时使用主页的 API 并在前端过滤
+          const response = await TopicService.findTopics({
+            findby: "recent",
+            max: 50, // 获取更多以确保能找到当前用户的话题
+            recency: 0
+          });
 
-          // Filter topics by user ID
-          const userTopics = mockTopics.filter(topic => topic.authorId === userId);
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取用户话题失败");
+          }
+
+          // 筛选用户创建的话题
+          const userApiTopics = response.data.topics.filter(t => t.user_uid === userId);
+
+          // 转换格式
+          const promises = userApiTopics.map(apiTopic =>
+            convertApiTopicToTopic(apiTopic, userId)
+          );
+          const userTopics = await Promise.all(promises);
 
           set({
             userTopics,
             isLoading: false
           });
-        } catch (error) {
-          console.error("Failed to fetch user topics:", error);
+        } catch (error: any) {
+          console.error("获取用户话题失败:", error);
           set({
-            error: "Failed to fetch user topics",
+            error: error.message || "获取用户话题失败",
             isLoading: false,
-            userTopics: [] // Ensure userTopics is always an array even on error
+            userTopics: [] // 确保即使出错也有一个数组
           });
         }
       },
@@ -335,218 +183,217 @@ export const useTopicStore = create<TopicStore>()(
       fetchLikedTopics: async (userId: string) => {
         set({ isLikedTopicsLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 这里应该有一个获取用户点赞话题的 API
+          // 暂时使用主页的 API，实际项目中需要替换
+          const response = await TopicService.findTopics({
+            findby: "liked", // 假设有这样的 API
+            max: 10,
+            recency: 0
+          });
 
-          // Filter topics that are liked
-          // In a real app, you would fetch this from an API
-          const likedTopics = mockTopics.filter(topic => topic.isLiked);
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取点赞话题失败");
+          }
 
-          // Add some random liked topics for demo purposes
-          const extraLikedTopics = generateMoreMockTopics(1, 3).map(topic => ({
-            ...topic,
-            isLiked: true
-          }));
+          // 转换格式
+          const promises = response.data.topics.map(apiTopic => {
+            // 点赞页面的话题都是已经点赞过的
+            const topic = convertApiTopicToTopic(apiTopic, userId);
+            return topic.then(t => ({ ...t, isLiked: true }));
+          });
+          const likedTopics = await Promise.all(promises);
 
           set({
-            likedTopics: [...likedTopics, ...extraLikedTopics],
+            likedTopics,
             isLikedTopicsLoading: false
           });
-        } catch (error) {
-          console.error("Failed to fetch liked topics:", error);
+        } catch (error: any) {
+          console.error("获取点赞话题失败:", error);
           set({
-            error: "Failed to fetch liked topics",
+            error: error.message || "获取点赞话题失败",
             isLikedTopicsLoading: false,
-            likedTopics: [] // Ensure likedTopics is always an array even on error
+            likedTopics: [] // 确保即使出错也有一个数组
           });
         }
       },
 
       loadMoreTopics: async () => {
-        const { currentPage, filter } = get();
-        const nextPage = currentPage + 1;
+        const { currentLastScore, isLoading, hasMoreTopics } = get();
+
+        // 如果正在加载或没有更多话题，则不执行
+        if (isLoading || !hasMoreTopics) return;
 
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          set({ isLoading: true });
 
-          // Generate more mock topics
-          const newTopics = generateMoreMockTopics(nextPage);
+          // 调用 API 获取更多话题
+          const response = await TopicService.findTopics({
+            findby: "recent",
+            max: 10,
+            recency: currentLastScore
+          });
 
-          // If we have less than the page size, there are no more topics
-          const hasMore = newTopics.length === 5;
+          if (response.code !== 0) {
+            throw new Error(response.message || "加载更多话题失败");
+          }
 
+          // 如果没有更多数据，设置 hasMoreTopics 为 false
+          if (response.data.topics.length === 0) {
+            set({ hasMoreTopics: false, isLoading: false });
+            return;
+          }
+
+          // 获取当前用户 ID
+          const currentUser = useAuthStore.getState().user;
+          const currentUserId = currentUser?.id;
+
+          // 转换格式
+          const promises = response.data.topics.map(apiTopic =>
+            convertApiTopicToTopic(apiTopic, currentUserId)
+          );
+          const newTopics = await Promise.all(promises);
+
+          // 将新话题添加到现有话题列表
           set(state => ({
             topics: [...state.topics, ...newTopics],
-            currentPage: nextPage,
-            hasMoreTopics: hasMore
+            currentLastScore: response.data.score,
+            hasMoreTopics: response.data.topics.length >= 10,
+            isLoading: false
           }));
 
+          // 应用过滤器
           get().applyFilters();
-        } catch (error) {
-          console.error("Failed to load more topics", error);
+        } catch (error: any) {
+          console.error("加载更多话题失败:", error);
+          set({ error: error.message || "加载更多话题失败", isLoading: false });
         }
       },
 
       fetchTopicById: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // 调用 API 获取话题详情
+          const response = await TopicService.getTopicById(id);
 
-          const topic = get().topics.find(t => t.id === id);
-
-          if (topic) {
-            set({ currentTopic: topic, isLoading: false });
-          } else {
-            set({ error: "Topic not found", isLoading: false });
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取话题详情失败");
           }
-        } catch (error) {
-          set({ error: "Failed to fetch topic", isLoading: false });
+
+          const apiTopic = response.data.topic;
+
+          // 获取当前用户 ID
+          const currentUser = useAuthStore.getState().user;
+          const currentUserId = currentUser?.id;
+
+          // 转换为应用格式
+          const topic = await convertApiTopicToTopic(apiTopic, currentUserId);
+
+          set({ currentTopic: topic, isLoading: false });
+        } catch (error: any) {
+          console.error("获取话题详情失败:", error);
+          set({ error: error.message || "获取话题详情失败", isLoading: false });
         }
       },
 
       createTopic: async (topicData: CreateTopicPayload) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
-          const user = useAuthStore.getState().user;
-
-          if (!user) {
-            set({ error: "Not authenticated", isLoading: false });
-            return;
-          }
-
-          const newTopic: Topic = {
-            id: String(get().topics.length + 1),
+          // 准备 API 请求的数据
+          const apiTopicData = {
             title: topicData.title,
             content: topicData.content,
-            author: user,
-            authorId: user.id,
-            images: topicData.images,
+            location_latitude: topicData.location.latitude,
+            location_longitude: topicData.location.longitude,
             tags: topicData.tags,
-            location: topicData.location,
-            expiresAt: topicData.expiresAt,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            likesCount: 0,
-            commentsCount: 0,
-            isLiked: false,
+            // 图片路径需要先上传到 Firebase 然后将路径传给 API
+            topic_images: topicData.images, // 假设已经是 Firebase 路径
+            expires_at: topicData.expiresAt
           };
 
-          // In a real app, we would save this to the backend
-          const updatedTopics = [newTopic, ...get().topics];
-          set({ topics: updatedTopics, isLoading: false });
+          // 调用 API 创建话题
+          const response = await TopicService.createTopic(apiTopicData);
 
-          // Update userTopics if the new topic belongs to the current user
-          const { userTopics } = get();
-          if (userTopics.length > 0) {
-            set({ userTopics: [newTopic, ...userTopics] });
+          if (response.code !== 0) {
+            throw new Error(response.message || "创建话题失败");
           }
 
-          get().applyFilters();
-        } catch (error) {
-          set({ error: "Failed to create topic", isLoading: false });
+          // 重新获取话题列表以更新
+          await get().fetchTopics();
+
+          set({ isLoading: false });
+        } catch (error: any) {
+          console.error("创建话题失败:", error);
+          set({ error: error.message || "创建话题失败", isLoading: false });
         }
       },
 
       updateTopic: async (id: string, topicData: Partial<CreateTopicPayload>) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 准备 API 请求的数据
+          const apiTopicData: any = {};
 
-          const topics = get().topics;
-          const topicIndex = topics.findIndex(t => t.id === id);
+          if (topicData.title) apiTopicData.title = topicData.title;
+          if (topicData.content) apiTopicData.content = topicData.content;
+          if (topicData.location) {
+            apiTopicData.location_latitude = topicData.location.latitude;
+            apiTopicData.location_longitude = topicData.location.longitude;
+          }
+          if (topicData.tags) apiTopicData.tags = topicData.tags;
+          if (topicData.images) apiTopicData.topic_images = topicData.images;
+          if (topicData.expiresAt) apiTopicData.expires_at = topicData.expiresAt;
 
-          if (topicIndex === -1) {
-            set({ error: "Topic not found", isLoading: false });
-            return;
+          // 调用 API 更新话题
+          const response = await TopicService.updateTopic(id, apiTopicData);
+
+          if (response.code !== 0) {
+            throw new Error(response.message || "更新话题失败");
           }
 
-          const updatedTopic = {
-            ...topics[topicIndex],
-            ...topicData,
-            updatedAt: new Date().toISOString(),
-          };
+          // 更新当前话题和话题列表
+          await get().fetchTopicById(id);
+          await get().fetchTopics();
 
-          const updatedTopics = [...topics];
-          updatedTopics[topicIndex] = updatedTopic;
-
-          set({ topics: updatedTopics, isLoading: false });
-
-          // Update userTopics if needed
-          const { userTopics } = get();
-          if (userTopics.length > 0) {
-            const userTopicIndex = userTopics.findIndex(t => t.id === id);
-            if (userTopicIndex !== -1) {
-              const updatedUserTopics = [...userTopics];
-              updatedUserTopics[userTopicIndex] = updatedTopic;
-              set({ userTopics: updatedUserTopics });
-            }
-          }
-
-          // Update likedTopics if needed
-          const { likedTopics } = get();
-          if (likedTopics.length > 0) {
-            const likedTopicIndex = likedTopics.findIndex(t => t.id === id);
-            if (likedTopicIndex !== -1) {
-              const updatedLikedTopics = [...likedTopics];
-              updatedLikedTopics[likedTopicIndex] = updatedTopic;
-              set({ likedTopics: updatedLikedTopics });
-            }
-          }
-
-          if (get().currentTopic?.id === id) {
-            set({ currentTopic: updatedTopic });
-          }
-
-          get().applyFilters();
-        } catch (error) {
-          set({ error: "Failed to update topic", isLoading: false });
+          set({ isLoading: false });
+        } catch (error: any) {
+          console.error("更新话题失败:", error);
+          set({ error: error.message || "更新话题失败", isLoading: false });
         }
       },
 
       deleteTopic: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 调用 API 删除话题
+          // 注意：你需要在 TopicService 中添加这个方法
+          // const response = await TopicService.deleteTopic(id);
 
+          // 从本地状态中移除话题
           const updatedTopics = get().topics.filter(t => t.id !== id);
-          set({ topics: updatedTopics, isLoading: false });
+          const updatedUserTopics = get().userTopics.filter(t => t.id !== id);
+          const updatedLikedTopics = get().likedTopics.filter(t => t.id !== id);
 
-          // Update userTopics if needed
-          const { userTopics } = get();
-          if (userTopics.length > 0) {
-            const updatedUserTopics = userTopics.filter(t => t.id !== id);
-            set({ userTopics: updatedUserTopics });
-          }
-
-          // Update likedTopics if needed
-          const { likedTopics } = get();
-          if (likedTopics.length > 0) {
-            const updatedLikedTopics = likedTopics.filter(t => t.id !== id);
-            set({ likedTopics: updatedLikedTopics });
-          }
+          set({
+            topics: updatedTopics,
+            userTopics: updatedUserTopics,
+            likedTopics: updatedLikedTopics,
+            isLoading: false
+          });
 
           if (get().currentTopic?.id === id) {
             set({ currentTopic: null });
           }
 
           get().applyFilters();
-        } catch (error) {
-          set({ error: "Failed to delete topic", isLoading: false });
+        } catch (error: any) {
+          console.error("删除话题失败:", error);
+          set({ error: error.message || "删除话题失败", isLoading: false });
         }
       },
 
       likeTopic: async (id: string) => {
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 300));
-
+          // 获取当前话题状态
           const topics = get().topics;
           const topicIndex = topics.findIndex(t => t.id === id);
 
@@ -556,6 +403,7 @@ export const useTopicStore = create<TopicStore>()(
           const isLiked = !topic.isLiked;
           const likesCount = isLiked ? topic.likesCount + 1 : topic.likesCount - 1;
 
+          // 立即更新 UI 状态
           const updatedTopic = {
             ...topic,
             isLiked,
@@ -567,7 +415,7 @@ export const useTopicStore = create<TopicStore>()(
 
           set({ topics: updatedTopics });
 
-          // Update userTopics if needed
+          // 更新 userTopics 如果需要
           const { userTopics } = get();
           if (userTopics.length > 0) {
             const userTopicIndex = userTopics.findIndex(t => t.id === id);
@@ -578,22 +426,22 @@ export const useTopicStore = create<TopicStore>()(
             }
           }
 
-          // Update likedTopics if needed
+          // 更新 likedTopics 如果需要
           const { likedTopics } = get();
           if (likedTopics.length > 0) {
             if (isLiked) {
-              // Add to liked topics if not already there
+              // 如果是点赞，添加到 likedTopics
               if (!likedTopics.some(t => t.id === id)) {
                 set({ likedTopics: [updatedTopic, ...likedTopics] });
               } else {
-                // Update existing liked topic
+                // 更新已存在的
                 const likedTopicIndex = likedTopics.findIndex(t => t.id === id);
                 const updatedLikedTopics = [...likedTopics];
                 updatedLikedTopics[likedTopicIndex] = updatedTopic;
                 set({ likedTopics: updatedLikedTopics });
               }
             } else {
-              // Remove from liked topics
+              // 如果是取消点赞，从 likedTopics 中移除
               const updatedLikedTopics = likedTopics.filter(t => t.id !== id);
               set({ likedTopics: updatedLikedTopics });
             }
@@ -603,9 +451,14 @@ export const useTopicStore = create<TopicStore>()(
             set({ currentTopic: updatedTopic });
           }
 
+          // 应用过滤器
           get().applyFilters();
-        } catch (error) {
-          console.error("Failed to like topic", error);
+
+          // 调用 API 进行点赞/取消点赞
+          await TopicService.likeTopic(id);
+        } catch (error: any) {
+          console.error("话题点赞操作失败:", error);
+          // 点赞失败，可考虑恢复原状态
         }
       },
 
@@ -618,7 +471,7 @@ export const useTopicStore = create<TopicStore>()(
         const { topics, filter } = get();
         let filtered = [...topics];
 
-        // Apply search filter
+        // 应用搜索过滤
         if (filter.search) {
           const searchLower = filter.search.toLowerCase();
           filtered = filtered.filter(
@@ -629,21 +482,22 @@ export const useTopicStore = create<TopicStore>()(
           );
         }
 
-        // Apply tag filter
+        // 应用标签过滤
         if (filter.tags && filter.tags.length > 0) {
           filtered = filtered.filter(
-            topic => filter.tags!.some(tag => topic.tags.includes(tag))
+            topic => topic.tags && topic.tags.length > 0 && // 添加检查
+              filter.tags!.some(tag => topic.tags.includes(tag))
           );
         }
 
-        // Apply distance filter
+        // 应用距离过滤
         if (filter.distance) {
           filtered = filtered.filter(
             topic => topic.distance !== undefined && topic.distance <= filter.distance!
           );
         }
 
-        // Apply sorting
+        // 应用排序
         if (filter.sort) {
           switch (filter.sort) {
             case 'recent':
@@ -665,9 +519,7 @@ export const useTopicStore = create<TopicStore>()(
       name: 'topic-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
-        topics: state.topics,
         filter: state.filter,
-        currentPage: state.currentPage,
       }),
     }
   )

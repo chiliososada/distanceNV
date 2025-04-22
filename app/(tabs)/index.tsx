@@ -8,8 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Animated,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -54,6 +52,7 @@ export default function HomeScreen() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const headerHeight = useRef(new Animated.Value(HEADER_MAX_HEIGHT)).current;
 
+  // 初始加载话题数据
   useEffect(() => {
     fetchTopics();
     loadLocation();
@@ -66,12 +65,14 @@ export default function HomeScreen() {
     }
   };
 
+  // 下拉刷新处理
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchTopics();
     setRefreshing(false);
   };
 
+  // 搜索处理
   const handleSearch = (text: string) => {
     setSearchQuery(text);
     setFilter({ search: text });
@@ -85,10 +86,12 @@ export default function HomeScreen() {
     setSortMenuVisible(true);
   };
 
+  // 排序选择处理
   const handleSortSelect = (sortValue: TopicFilter['sort']) => {
     setFilter({ sort: sortValue });
   };
 
+  // 过滤选择处理
   const handleFilterSelect = (filterValue: string) => {
     if (filterValue === 'nearby') {
       setFilter({ distance: 5 });
@@ -97,15 +100,17 @@ export default function HomeScreen() {
     }
   };
 
+  // 获取当前排序标签
   const getSortLabel = () => {
     switch (filter.sort) {
-      case 'recent': return 'Recent';
-      case 'popular': return 'Popular';
-      case 'distance': return 'Distance';
-      default: return 'Sort';
+      case 'recent': return '最新';
+      case 'popular': return '热门';
+      case 'distance': return '距离';
+      default: return '排序';
     }
   };
 
+  // 加载更多话题
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || !hasMoreTopics || isLoading) return;
 
@@ -114,74 +119,78 @@ export default function HomeScreen() {
     setLoadingMore(false);
   }, [loadingMore, hasMoreTopics, isLoading, loadMoreTopics]);
 
+  // 点赞话题
   const handleLikeTopic = (id: string) => {
     likeTopic(id);
   };
 
-  // 简化滚动处理函数
+  // 滚动处理
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
     { useNativeDriver: false }
   );
 
   const handleScrollEndDrag = () => {
-    // 不进行任何操作
+    // 不需要特殊处理
   };
 
+  // 加载更多时的底部组件
   const renderFooter = () => {
     if (!loadingMore) return null;
 
     return (
       <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.footerText}>Loading more topics...</Text>
+        <Text style={styles.footerText}>正在加载更多话题...</Text>
       </View>
     );
   };
 
+  // 排序选项
   const sortOptions = [
     {
-      label: 'Recent',
+      label: '最新',
       value: 'recent' as const,
       icon: <Clock size={18} color={filter.sort === 'recent' ? colors.primary : colors.textSecondary} />
     },
     {
-      label: 'Popular',
+      label: '热门',
       value: 'popular' as const,
       icon: <TrendingUp size={18} color={filter.sort === 'popular' ? colors.primary : colors.textSecondary} />
     },
     {
-      label: 'Distance',
+      label: '距离',
       value: 'distance' as const,
       icon: <Navigation size={18} color={filter.sort === 'distance' ? colors.primary : colors.textSecondary} />
     }
   ];
 
+  // 过滤选项
   const filterOptions = [
-    { label: 'All Topics', value: 'all' },
-    { label: 'Nearby (5 miles)', value: 'nearby' },
-    { label: 'Events Only', value: 'events' },
-    { label: 'With Images', value: 'images' }
+    { label: '所有话题', value: 'all' },
+    { label: '附近 (5 公里)', value: 'nearby' },
+    { label: '仅限活动', value: 'events' },
+    { label: '带图片', value: 'images' }
   ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
 
-      {/* 修改后的顶部区域布局 */}
+      {/* 顶部区域 */}
       <View style={styles.headerContainer}>
         {/* 位置信息区域 */}
         <View style={styles.locationContainer}>
           <MapPin size={16} color={colors.primary} />
           <Text style={styles.locationText}>
-            {location || 'Set your location'}
+            {location || '设置您的位置'}
           </Text>
         </View>
 
-        {/* 欢迎语和过滤器区域 - 使用flexDirection: 'row'将它们放在同一行 */}
+        {/* 欢迎语和过滤器区域 - 使用 flexDirection: 'row' 将它们放在同一行 */}
         <View style={styles.greetingRow}>
           <Text style={styles.greeting}>
-            Hello, {user?.displayName?.split(' ')[0] || 'there'}!
+            你好, {user?.displayName?.split(' ')[0] || '朋友'}!
           </Text>
 
           {/* 过滤和排序按钮移到欢迎语的右侧 */}
@@ -191,7 +200,7 @@ export default function HomeScreen() {
               onPress={handleFilterPress}
             >
               <Filter size={16} color={colors.textSecondary} />
-              <Text style={styles.filterText}>Filters</Text>
+              <Text style={styles.filterText}>过滤</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -209,7 +218,7 @@ export default function HomeScreen() {
           <SearchBar
             value={searchQuery}
             onChangeText={handleSearch}
-            placeholder="Search topics, tags, or users"
+            placeholder="搜索话题、标签或用户"
             compact={true}
           />
         </View>
@@ -247,30 +256,30 @@ export default function HomeScreen() {
           ListFooterComponent={renderFooter}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>No topics found</Text>
+              <Text style={styles.emptyTitle}>未找到话题</Text>
               <Text style={styles.emptyText}>
-                Try adjusting your filters or create a new topic
+                请尝试调整过滤条件或创建一个新话题
               </Text>
             </View>
           }
         />
       )}
 
-      {/* Sort Menu */}
+      {/* 排序菜单 */}
       <FilterMenu
         visible={sortMenuVisible}
         onClose={() => setSortMenuVisible(false)}
-        title="Sort By"
+        title="排序方式"
         options={sortOptions}
         selectedValue={filter.sort}
         onSelect={handleSortSelect}
       />
 
-      {/* Filter Menu */}
+      {/* 过滤菜单 */}
       <FilterMenu
         visible={filterMenuVisible}
         onClose={() => setFilterMenuVisible(false)}
-        title="Filter Topics"
+        title="过滤话题"
         options={filterOptions}
         selectedValue={filter.distance ? 'nearby' : 'all'}
         onSelect={handleFilterSelect}
