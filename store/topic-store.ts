@@ -115,30 +115,56 @@ export const useTopicStore = create<TopicStore>()(
             throw new Error(response.message || "获取话题失败");
           }
 
+          // 安全检查 - 确保response.data和response.data.topics存在且是数组
+          if (!response.data || !response.data.topics || !Array.isArray(response.data.topics)) {
+            console.error("API返回数据结构异常:", response);
+            set({
+              topics: [],
+              filteredTopics: [],
+              currentLastScore: 0,
+              hasMoreTopics: false,
+              isLoading: false,
+              error: "获取话题数据格式错误"
+            });
+            return;
+          }
+
           // 获取当前用户 ID
           const currentUser = useAuthStore.getState().user;
           const currentUserId = currentUser?.id;
 
-          // 转换话题格式
+          // 转换话题格式，添加错误处理
           const promises = response.data.topics.map(apiTopic =>
             convertApiTopicToTopic(apiTopic, currentUserId)
           );
+
           const topics = await Promise.all(promises);
 
           // 更新状态
           set({
             topics,
             filteredTopics: topics,
-            currentLastScore: response.data.score,
-            hasMoreTopics: response.data.topics.length >= 10, // 如果返回的数量等于请求的最大数，认为还有更多
+            currentLastScore: response.data.score || 0,
+            hasMoreTopics: response.data.topics.length >= 10,
             isLoading: false
           });
 
           // 应用过滤
           get().applyFilters();
-        } catch (error: any) {
+        } catch (error) {
           console.error("获取话题失败:", error);
-          set({ error: error.message || "获取话题失败", isLoading: false });
+          let errorMessage = "获取话题失败";
+
+          if (error instanceof Error) {
+            errorMessage = error.message;
+          }
+
+          set({
+            error: errorMessage,
+            isLoading: false,
+            topics: [],      // 确保即使出错也有一个空数组
+            filteredTopics: [] // 确保即使出错也有一个空数组
+          });
         }
       },
 
@@ -146,7 +172,7 @@ export const useTopicStore = create<TopicStore>()(
         set({ isLoading: true, error: null });
         try {
           // 这里应该有一个通过用户 ID 获取话题的 API
-          // 暂时使用主页的 API 并在前端过滤
+          // 暂时使用主页的 API 并在前端过滤 需要修改
           const response = await TopicService.findTopics({
             findby: "recent",
             max: 50, // 获取更多以确保能找到当前用户的话题
@@ -217,13 +243,14 @@ export const useTopicStore = create<TopicStore>()(
         }
       },
 
+      // 在loadMoreTopics函数中进行错误处理
       loadMoreTopics: async () => {
-        const { currentLastScore, isLoading, hasMoreTopics } = get();
-
-        // 如果正在加载或没有更多话题，则不执行
-        if (isLoading || !hasMoreTopics) return;
-
         try {
+          const { currentLastScore, isLoading, hasMoreTopics } = get();
+
+          // 如果正在加载或没有更多话题，则不执行
+          if (isLoading || !hasMoreTopics) return;
+
           set({ isLoading: true });
 
           // 调用 API 获取更多话题
@@ -233,8 +260,14 @@ export const useTopicStore = create<TopicStore>()(
             recency: currentLastScore
           });
 
-          if (response.code !== 0) {
-            throw new Error(response.message || "加载更多话题失败");
+          if (!response || response.code !== 0) {
+            throw new Error(response?.message || "加载更多话题失败");
+          }
+
+          // 安全检查
+          if (!response.data || !Array.isArray(response.data.topics)) {
+            set({ hasMoreTopics: false, isLoading: false });
+            return;
           }
 
           // 如果没有更多数据，设置 hasMoreTopics 为 false
@@ -247,25 +280,48 @@ export const useTopicStore = create<TopicStore>()(
           const currentUser = useAuthStore.getState().user;
           const currentUserId = currentUser?.id;
 
-          // 转换格式
-          const promises = response.data.topics.map(apiTopic =>
-            convertApiTopicToTopic(apiTopic, currentUserId)
-          );
-          const newTopics = await Promise.all(promises);
+          // 转换格式，添加错误处理，并确保类型一致
+          const newTopicsPromises = response.data.topics.map(async (apiTopic) => {
+            try {
+              return await convertApiTopicToTopic(apiTopic, currentUserId);
+            } catch (error) {
+              console.error("转换话题数据失败:", error);
+              // 跳过这个话题，而不是返回默认值
+              return null;
+            }
+          });
 
-          // 将新话题添加到现有话题列表
-          set(state => ({
-            topics: [...state.topics, ...newTopics],
-            currentLastScore: response.data.score,
-            hasMoreTopics: response.data.topics.length >= 10,
-            isLoading: false
-          }));
+          try {
+            const allNewTopics = await Promise.all(newTopicsPromises);
+            // 过滤掉null值，确保类型一致性
+            const newTopics = allNewTopics.filter((topic): topic is Topic => topic !== null);
 
-          // 应用过滤器
-          get().applyFilters();
-        } catch (error: any) {
+            // 使用类型断言告诉TypeScript我们确保类型安全
+            set((state) => {
+              return {
+                topics: [...state.topics, ...newTopics],
+                currentLastScore: response.data.score || 0,
+                hasMoreTopics: response.data.topics.length >= 10,
+                isLoading: false,
+                error: null
+              } as Partial<TopicStore>;
+            });
+
+            // 安全地应用过滤器
+            get().applyFilters();
+          } catch (error) {
+            console.error("处理话题数据失败:", error);
+            set({ error: "处理话题数据失败", isLoading: false });
+          }
+        } catch (error) {
           console.error("加载更多话题失败:", error);
-          set({ error: error.message || "加载更多话题失败", isLoading: false });
+
+          let errorMessage = "加载更多话题失败";
+          if (error instanceof Error) {
+            errorMessage = error.message || errorMessage;
+          }
+
+          set({ error: errorMessage, isLoading: false });
         }
       },
 
@@ -478,14 +534,15 @@ export const useTopicStore = create<TopicStore>()(
             topic =>
               topic.title.toLowerCase().includes(searchLower) ||
               topic.content.toLowerCase().includes(searchLower) ||
-              topic.tags.some(tag => tag.toLowerCase().includes(searchLower))
+              (topic.tags && Array.isArray(topic.tags) &&
+                topic.tags.some(tag => tag.toLowerCase().includes(searchLower)))
           );
         }
 
         // 应用标签过滤
         if (filter.tags && filter.tags.length > 0) {
           filtered = filtered.filter(
-            topic => topic.tags && topic.tags.length > 0 && // 添加检查
+            topic => topic.tags && Array.isArray(topic.tags) && topic.tags.length > 0 &&
               filter.tags!.some(tag => topic.tags.includes(tag))
           );
         }
