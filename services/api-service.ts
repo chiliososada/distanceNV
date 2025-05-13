@@ -35,7 +35,7 @@ interface UpdateProfileRequest {
 
 
 class ApiService {
-    private apiBaseURL = 'https://192.168.0.9:52340';
+    private apiBaseURL = process.env.EXPO_PUBLIC_API_URL || 'https://192.168.0.9:52340';
     private apiVersion = 'v1';
     private token: string | null = null;
 
@@ -72,7 +72,8 @@ class ApiService {
     // 通用GET请求方法
     async get<T>(endpoint: string, params?: any): Promise<T> {
         const config = this.addAuthHeader({
-            params
+            params,
+            timeout: 10000 // 10秒超时
         });
         const url = this.getUrl(endpoint);
 
@@ -87,7 +88,9 @@ class ApiService {
 
     // 通用POST请求方法
     async post<T>(endpoint: string, data?: any): Promise<T> {
-        const config = this.addAuthHeader();
+        const config = this.addAuthHeader({
+            timeout: 10000 // 10秒超时
+        });
         const url = this.getUrl(endpoint);
 
         try {
@@ -100,7 +103,9 @@ class ApiService {
     }
 
     async put<T>(endpoint: string, data?: any): Promise<T> {
-        const config = this.addAuthHeader();
+        const config = this.addAuthHeader({
+            timeout: 10000 // 10秒超时
+        });
         const url = this.getUrl(endpoint);
 
         try {
