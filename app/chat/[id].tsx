@@ -31,6 +31,8 @@ import { useAuthStore } from '@/store/auth-store';
 import { Message } from '@/types/chat';
 import { ImageViewer } from '@/components/ImageViewer';
 
+import WebSocketService from '@/services/websocket-service';
+
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -102,7 +104,18 @@ export default function ChatScreen() {
 
     try {
       setIsSending(true);
-      await sendMessage(messageData);
+
+      // 使用WebSocket发送文本消息
+      if (message.trim()) {
+        WebSocketService.sendMessage(message.trim(), chat.id);
+      }
+
+      // 如果有图片，先上传然后再发送
+      if (selectedImage) {
+        // 上传图片的逻辑...
+        // 图片上传完成后，可以再发送一条包含图片URL的消息
+      }
+
       setMessage('');
       setSelectedImage(null);
 

@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, LoginCredentials, RegisterData } from '@/types/auth';
 import FirebaseAuthService from '@/services/firebase-auth-service';
 import ApiService from '@/services/api-service';
+import WebSocketService from '@/services/websocket-service';
 
 interface AuthState {
   user: User | null;
@@ -161,6 +162,26 @@ export const useAuthStore = create<AuthStore>()(
             isProfileComplete: isProfileComplete,  // 确保正确设置这个值
             isLoading: false
           });
+
+
+          // 初始化WebSocket连接
+          WebSocketService.initialize({
+            uid: session.uid,
+            chat_token: session.chat_token,
+            chat_url: session.chat_url,
+            display_name: session.display_name || '',
+            photo_url: session.photo_url
+          });
+
+          // 连接WebSocket
+          WebSocketService.connect();
+
+          // 如果有聊天室，则加入
+          if (chats && chats.length > 0) {
+            const chatIds = chats.map(chat => chat.chat_room_id);
+            WebSocketService.joinChats(chatIds);
+          }
+          // ========================================
         } catch (error: any) {
           console.error("登录失败:", error);
           set({
@@ -193,6 +214,8 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         try {
+          // 断开WebSocket连接
+          WebSocketService.disconnect();
           // 清理API服务中的token
           ApiService.clearToken();
         } catch (error) {

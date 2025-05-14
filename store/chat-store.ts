@@ -1,8 +1,10 @@
+// store/chat-store.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Chat, CreateChatPayload, CreateMessagePayload, Message } from '@/types/chat';
 import { useAuthStore } from './auth-store';
+import { ChatMessage } from '@/services/websocket-service';
 
 // Mock chats for demo
 const mockChats: Chat[] = [
@@ -891,6 +893,9 @@ export interface ChatStore extends ChatState {
   createChat: (chatData: CreateChatPayload) => Promise<string>;
   markChatAsRead: (chatId: string) => Promise<void>;
   updateChatSettings: (chatId: string, settings: Partial<Chat>) => Promise<void>;
+  // WebSocket相关方法
+  addWebSocketMessage: (message: ChatMessage) => void;
+  joinChatRooms: (chatIds: string[]) => void;
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -905,67 +910,67 @@ export const useChatStore = create<ChatStore>()(
       fetchChats: async () => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
+          // 模拟API调用
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // In a real app, we would fetch from an API
+
+          // 在实际应用中，我们会从API获取
           set({ chats: mockChats, isLoading: false });
         } catch (error) {
-          console.error("Failed to fetch chats:", error);
-          set({ error: "Failed to fetch chats", isLoading: false });
+          console.error("获取聊天列表失败:", error);
+          set({ error: "获取聊天列表失败", isLoading: false });
         }
       },
 
       fetchChatById: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
+          // 模拟API调用
           await new Promise(resolve => setTimeout(resolve, 500));
-          
+
           const chat = mockChats.find(c => c.id === id);
-          
+
           if (chat) {
             set({ currentChat: chat, isLoading: false });
           } else {
-            console.error("Chat not found:", id);
-            set({ error: "Chat not found", isLoading: false });
+            console.error("未找到聊天:", id);
+            set({ error: "未找到聊天", isLoading: false });
           }
         } catch (error) {
-          console.error("Failed to fetch chat:", error);
-          set({ error: "Failed to fetch chat", isLoading: false });
+          console.error("获取聊天详情失败:", error);
+          set({ error: "获取聊天详情失败", isLoading: false });
         }
       },
 
       fetchMessages: async (chatId: string) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call but with shorter delay
+          // 模拟API调用，但延迟较短
           await new Promise(resolve => setTimeout(resolve, 300));
-          
+
           const chatMessages = mockMessages[chatId] || [];
-          
+
           const updatedMessages = { ...get().messages };
           updatedMessages[chatId] = chatMessages;
-          
+
           set({ messages: updatedMessages, isLoading: false });
         } catch (error) {
-          console.error("Failed to fetch messages:", error);
-          set({ error: "Failed to fetch messages", isLoading: false });
+          console.error("获取消息失败:", error);
+          set({ error: "获取消息失败", isLoading: false });
         }
       },
 
       sendMessage: async (messageData: CreateMessagePayload) => {
         try {
           const user = useAuthStore.getState().user;
-          
+
           if (!user) {
-            console.error("Not authenticated");
-            throw new Error("Not authenticated");
+            console.error("未认证");
+            throw new Error("未认证");
           }
-          
+
           const chatId = messageData.chatId;
-          
-          // Create new message
+
+          // 创建新消息
           const newMessage: Message = {
             id: String(Date.now()),
             content: messageData.content || "",
@@ -976,18 +981,18 @@ export const useChatStore = create<ChatStore>()(
             readBy: [user.id],
             images: messageData.images,
           };
-          
-          // Get current state
+
+          // 获取当前状态
           const currentMessages = { ...get().messages };
           const currentChats = [...get().chats];
-          
-          // Update messages in state
+
+          // 更新状态中的消息
           const chatMessages = currentMessages[chatId] || [];
           currentMessages[chatId] = [...chatMessages, newMessage];
-          
-          // Update the chat's last message and updated time
+
+          // 更新聊天的最后一条消息和更新时间
           const chatIndex = currentChats.findIndex(c => c.id === chatId);
-          
+
           if (chatIndex !== -1) {
             currentChats[chatIndex] = {
               ...currentChats[chatIndex],
@@ -995,17 +1000,17 @@ export const useChatStore = create<ChatStore>()(
               updatedAt: new Date().toISOString(),
             };
           }
-          
-          // Update state immediately without delay
-          set({ 
+
+          // 立即更新状态而不延迟
+          set({
             messages: currentMessages,
             chats: currentChats,
-            isLoading: false // Ensure loading is false
+            isLoading: false
           });
-          
+
           return Promise.resolve();
         } catch (error) {
-          console.error("Failed to send message:", error);
+          console.error("发送消息失败:", error);
           return Promise.reject(error);
         }
       },
@@ -1013,38 +1018,38 @@ export const useChatStore = create<ChatStore>()(
       createChat: async (chatData: CreateChatPayload): Promise<string> => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
+          // 模拟API调用
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
           const user = useAuthStore.getState().user;
-          
+
           if (!user) {
-            console.error("Not authenticated");
-            set({ error: "Not authenticated", isLoading: false });
-            throw new Error("Not authenticated");
+            console.error("未认证");
+            set({ error: "未认证", isLoading: false });
+            throw new Error("未认证");
           }
-          
-          // Check if chat already exists (for private chats)
+
+          // 检查聊天是否已存在（针对私聊）
           if (!chatData.isGroup && chatData.participants.length === 1) {
             const otherUserId = chatData.participants[0];
             const existingChat = get().chats.find(
               c => !c.isGroup && c.participants.some(p => p.id === otherUserId)
             );
-            
+
             if (existingChat) {
               set({ isLoading: false });
               return existingChat.id;
             }
           }
-          
-          // Create new chat
+
+          // 创建新的聊天
           const newChat: Chat = {
             id: String(Date.now()),
             name: chatData.name,
             isGroup: chatData.isGroup,
             participants: [
               user,
-              ...mockChats[0].participants.filter(p => 
+              ...mockChats[0].participants.filter(p =>
                 chatData.participants.includes(p.id) && p.id !== user.id
               ),
             ],
@@ -1054,26 +1059,26 @@ export const useChatStore = create<ChatStore>()(
             unreadCount: 0,
             isMuted: false,
           };
-          
+
           const updatedChats = [newChat, ...get().chats];
-          
-          // Initialize empty message list for this chat
+
+          // 为此聊天初始化空消息列表
           const updatedMessages = { ...get().messages };
           updatedMessages[newChat.id] = [];
-          
-          set({ 
-            chats: updatedChats, 
+
+          set({
+            chats: updatedChats,
             messages: updatedMessages,
             currentChat: newChat,
-            isLoading: false 
+            isLoading: false
           });
-          
+
           return newChat.id;
         } catch (error) {
-          console.error("Failed to create chat:", error);
-          set({ 
-            error: "Failed to create chat", 
-            isLoading: false 
+          console.error("创建聊天失败:", error);
+          set({
+            error: "创建聊天失败",
+            isLoading: false
           });
           throw error;
         }
@@ -1082,31 +1087,31 @@ export const useChatStore = create<ChatStore>()(
       markChatAsRead: async (chatId: string) => {
         try {
           const user = useAuthStore.getState().user;
-          
+
           if (!user) {
-            console.error("Not authenticated");
+            console.error("未认证");
             return;
           }
-          
-          // Get current state
+
+          // 获取当前状态
           const currentChats = [...get().chats];
           const currentMessages = { ...get().messages };
-          
-          // Find the chat
+
+          // 查找聊天
           const chatIndex = currentChats.findIndex(c => c.id === chatId);
-          
+
           if (chatIndex === -1) {
-            console.error("Chat not found:", chatId);
+            console.error("聊天未找到:", chatId);
             return;
           }
-          
-          // Update chat unread count
+
+          // 更新聊天未读计数
           currentChats[chatIndex] = {
             ...currentChats[chatIndex],
             unreadCount: 0,
           };
-          
-          // Mark all messages as read by the current user
+
+          // 将所有消息标记为当前用户已读
           if (currentMessages[chatId]) {
             currentMessages[chatId] = currentMessages[chatId].map(message => {
               if (!message.readBy.includes(user.id)) {
@@ -1118,49 +1123,140 @@ export const useChatStore = create<ChatStore>()(
               return message;
             });
           }
-          
-          // Update state
-          set({ 
+
+          // 更新状态
+          set({
             chats: currentChats,
             messages: currentMessages,
           });
-          
+
           return Promise.resolve();
         } catch (error) {
-          console.error("Failed to mark chat as read:", error);
+          console.error("标记聊天为已读失败:", error);
           return Promise.reject(error);
         }
       },
 
       updateChatSettings: async (chatId: string, settings: Partial<Chat>) => {
         try {
-          // Get current state
+          // 获取当前状态
           const currentChats = [...get().chats];
-          
-          // Find the chat
+
+          // 查找聊天
           const chatIndex = currentChats.findIndex(c => c.id === chatId);
-          
+
           if (chatIndex === -1) {
-            console.error("Chat not found:", chatId);
-            return Promise.reject(new Error("Chat not found"));
+            console.error("聊天未找到:", chatId);
+            return Promise.reject(new Error("聊天未找到"));
           }
-          
-          // Update chat settings
+
+          // 更新聊天设置
           currentChats[chatIndex] = {
             ...currentChats[chatIndex],
             ...settings,
             updatedAt: new Date().toISOString(),
           };
-          
-          // Update state
+
+          // 更新状态
           set({ chats: currentChats });
-          
+
           return Promise.resolve();
         } catch (error) {
-          console.error("Failed to update chat settings:", error);
+          console.error("更新聊天设置失败:", error);
           return Promise.reject(error);
         }
       },
+
+      // WebSocket相关方法
+      addWebSocketMessage: (message: ChatMessage) => {
+        const { messages, chats } = get();
+        const chatId = message.chat_id;
+
+        // 确保消息对象格式正确
+        if (!message.message_id || !message.chat_id) {
+          console.error('消息缺少必要字段', message);
+          return;
+        }
+
+        // 转换WebSocket消息为应用消息格式
+        const appMessage: Message = {
+          id: message.message_id,
+          content: message.message,
+          senderId: message.user_id,
+          sender: {
+            id: message.user_id,
+            type: 'person',
+            email: '',
+            username: message.user_id,
+            displayName: message.nickname || '未知用户',
+            avatar: message.avatar_url,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            followersCount: 0,
+            followingCount: 0,
+            topicsCount: 0,
+            likesCount: 0,
+            lastActiveAt: new Date().toISOString(),
+          },
+          chatId: message.chat_id,
+          createdAt: message.at,
+          readBy: [message.user_id],
+        };
+
+        // 更新消息列表
+        const chatMessages = messages[chatId] || [];
+        const updatedMessages = { ...messages };
+
+        // 避免重复消息
+        if (!chatMessages.some(msg => msg.id === appMessage.id)) {
+          updatedMessages[chatId] = [...chatMessages, appMessage];
+        }
+
+        // 更新聊天列表
+        const chatIndex = chats.findIndex(c => c.id === chatId);
+        let updatedChats = [...chats];
+
+        if (chatIndex !== -1) {
+          // 更新现有聊天
+          const currentUserId = useAuthStore.getState().user?.id;
+          const isFromCurrentUser = message.user_id === currentUserId;
+
+          updatedChats[chatIndex] = {
+            ...updatedChats[chatIndex],
+            lastMessage: appMessage,
+            updatedAt: new Date().toISOString(),
+            unreadCount: isFromCurrentUser
+              ? updatedChats[chatIndex].unreadCount
+              : updatedChats[chatIndex].unreadCount + 1
+          };
+        } else {
+          // 这个聊天不在列表中，可能需要获取聊天信息
+          console.log('收到未知聊天室的消息:', chatId);
+          // 如果需要，可以在这里发起请求获取聊天信息
+        }
+
+        // 更新状态
+        set({
+          messages: updatedMessages,
+          chats: updatedChats
+        });
+      },
+
+      joinChatRooms: (chatIds: string[]) => {
+        // 此方法可用于在WebSocket服务中加入多个聊天室
+        import('@/services/websocket-service')
+          .then(module => {
+            const WebSocketService = module.default;
+            if (WebSocketService.isConnected()) {
+              WebSocketService.joinChats(chatIds);
+            } else {
+              console.error('WebSocket未连接，无法加入聊天室');
+            }
+          })
+          .catch(error => {
+            console.error('导入WebSocket服务失败:', error);
+          });
+      }
     }),
     {
       name: 'chat-storage',
