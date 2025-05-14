@@ -128,25 +128,25 @@ export const useAuthStore = create<AuthStore>()(
           }
 
           // 调用后端API获取用户资料
-          const userData = await ApiService.login(token);
+          const { session, chats } = await ApiService.login(token);
 
-          console.log("后端返回的用户资料:", userData);
+          console.log("后端返回的用户资料:", session, chats);
           // 保存token和用户信息
           ApiService.setToken(token);
 
           // 检查资料是否完整
-          const isProfileComplete = !!(userData.display_name && userData.display_name.trim() !== '');
+          const isProfileComplete = !!(session.display_name && session.display_name.trim() !== '');
 
           console.log("个人资料是否完整:", isProfileComplete);
           // 设置用户全部数据 接口还需要完善
           set({
             user: {
-              id: userData.uid,
-              email: userData.email,
-              displayName: userData.display_name || '',
-              avatar: userData.photo_url || '',
-              username: userData.email.split('@')[0] || '',
-              bio: userData.bio || '',
+              id: session.uid,
+              email: session.email,
+              displayName: session.display_name || '',
+              avatar: session.photo_url || '',
+              username: session.email.split('@')[0] || '',
+              bio: session.bio || '',
               type: 'person',//从数居裤获取UserType
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),

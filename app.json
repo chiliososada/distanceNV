@@ -29,6 +29,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "packagerOpts": {
+      "https": {
+        "key": "/Users/ziyuanliu/certificates/dev/hpe1.key",
+        "cert": "/Users/ziyuanliu/certificates/dev/hpe1.crt"
+      }
     }
   }
 }

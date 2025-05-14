@@ -1,10 +1,10 @@
 // services/api-service.ts
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 
-interface LoginResponse {
-    code: number;
-    message: string;
-    data: {
+axios.defaults.withCredentials = true;
+
+interface LoginResponseData {
+    session: {
         csrf_token: string;
         chat_token: string;
         uid: string;
@@ -13,9 +13,15 @@ interface LoginResponse {
         email: string;
         gender: string;
         bio: string;
-        chat_id: string[];
-        chat_url: string;
-    };
+        chat_url: string
+    }
+    chats: { chat_room_id: string, expires_at: string }[]
+}
+
+interface LoginResponse {
+    code: number;
+    message: string;
+    data: LoginResponseData
 }
 // 更新个人资料请求接口
 interface UpdateProfileRequest {
@@ -35,7 +41,7 @@ interface UpdateProfileRequest {
 
 
 class ApiService {
-    private apiBaseURL = process.env.EXPO_PUBLIC_API_URL || 'https://192.168.0.9:52340';
+    private apiBaseURL = process.env.EXPO_PUBLIC_API_URL
     private apiVersion = 'v1';
     private token: string | null = null;
 
@@ -118,7 +124,7 @@ class ApiService {
     }
 
     // 登录API，使用Firebase Token获取用户资料
-    async login(token: string): Promise<any> {
+    async login(token: string): Promise<LoginResponseData> {
         // 先设置token
         this.setToken(token);
 
