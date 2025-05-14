@@ -325,26 +325,61 @@ export const useTopicStore = create<TopicStore>()(
         }
       },
 
+      // fetchTopicById: async (id: string) => {
+      //   set({ isLoading: true, error: null });
+      //   try {
+      //     // 调用 API 获取话题详情
+      //     const response = await TopicService.getTopicById(id);
+
+      //     if (response.code !== 0) {
+      //       throw new Error(response.message || "获取话题详情失败");
+      //     }
+
+      //     const apiTopic = response.data.topic;
+
+      //     // 获取当前用户 ID
+      //     const currentUser = useAuthStore.getState().user;
+      //     const currentUserId = currentUser?.id;
+
+      //     // 转换为应用格式
+      //     const topic = await convertApiTopicToTopic(apiTopic, currentUserId);
+
+      //     set({ currentTopic: topic, isLoading: false });
+      //   } catch (error: any) {
+      //     console.error("获取话题详情失败:", error);
+      //     set({ error: error.message || "获取话题详情失败", isLoading: false });
+      //   }
+      // }
+      //
       fetchTopicById: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // 调用 API 获取话题详情
-          const response = await TopicService.getTopicById(id);
+          // 获取所有话题列表
+          const { topics, filteredTopics, userTopics, likedTopics } = get();
 
-          if (response.code !== 0) {
-            throw new Error(response.message || "获取话题详情失败");
+          // 从各个列表中查找话题
+          let topic =
+            topics.find(t => t.id === id) ||
+            filteredTopics.find(t => t.id === id) ||
+            userTopics.find(t => t.id === id) ||
+            likedTopics.find(t => t.id === id);
+
+          // 如果没有找到，并且话题列表为空，尝试加载话题列表
+          if (!topic && topics.length === 0) {
+            console.log('未找到话题，尝试加载话题列表');
+            //这里注意要修改 现在是从所有的fetchTopics
+            await get().fetchTopics();
+
+            // 再次从话题列表中查找 
+            topic = get().topics.find(t => t.id === id);
           }
 
-          const apiTopic = response.data.topic;
-
-          // 获取当前用户 ID
-          const currentUser = useAuthStore.getState().user;
-          const currentUserId = currentUser?.id;
-
-          // 转换为应用格式
-          const topic = await convertApiTopicToTopic(apiTopic, currentUserId);
-
-          set({ currentTopic: topic, isLoading: false });
+          if (topic) {
+            set({ currentTopic: topic, isLoading: false });
+          } else {
+            // 如果仍然没有找到，设置错误
+            throw new Error(`话题 ${id} 不存在`);
+          }
         } catch (error: any) {
           console.error("获取话题详情失败:", error);
           set({ error: error.message || "获取话题详情失败", isLoading: false });
@@ -373,7 +408,7 @@ export const useTopicStore = create<TopicStore>()(
             throw new Error(response.message || "创建话题失败");
           }
 
-          // 重新获取话题列表以更新
+          // 重新获取话题列表以更新 需要修改因为可能现在获取的东西不全
           await get().fetchTopics();
 
           set({ isLoading: false });
