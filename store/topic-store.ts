@@ -367,7 +367,7 @@ export const useTopicStore = create<TopicStore>()(
           // 如果没有找到，并且话题列表为空，尝试加载话题列表
           if (!topic && topics.length === 0) {
             console.log('未找到话题，尝试加载话题列表');
-            //这里注意要修改 现在是从所有的fetchTopics
+            //这里注意要修改 现在是从所有的fetchTopics中获取的 可能不是正确的 因为fetchTopics是分野查找ß
             await get().fetchTopics();
 
             // 再次从话题列表中查找 

@@ -168,22 +168,28 @@ class WebSocketService {
             return;
         }
 
-        const messageData = {
+        // const messageData = {
+        //     "type": "Chat",
+        //     "message": message,
+        //     "message_id": nanoid(),
+        //     "chat_id": chatId,
+        //     "at": new Date().toISOString(),
+        //     "user_id": this.session.uid,
+        //     "nickname": this.session.display_name,
+        //     "avatar_url": this.session.photo_url
+        // };
+
+        this.ws.send(JSON.stringify({
             "type": "Chat",
             "message": message,
             "message_id": nanoid(),
             "chat_id": chatId,
-            "at": new Date().toISOString(),
-            "user_id": this.session.uid,
-            "nickname": this.session.display_name,
-            "avatar_url": this.session.photo_url
-        };
-
-        this.ws.send(JSON.stringify(messageData));
+            "at": new Date().toISOString()
+        }));
 
         // 将自己发送的消息也添加到聊天存储
-        const chatStore = useChatStore.getState();
-        chatStore.addWebSocketMessage(messageData);
+        // const chatStore = useChatStore.getState();
+        //chatStore.addWebSocketMessage(messageData);
     }
 
     // 加入聊天室
