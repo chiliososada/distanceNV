@@ -3,6 +3,7 @@ import { AppState, AppStateStatus, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import EventEmitter from '@/utils/event-emitter';
 import { useAuthStore } from '@/store/auth-store';
+import WebSocketService from '@/services/websocket-service'; // 添加WebSocket服务导入
 
 export type AppStateType = 'active' | 'background' | 'inactive' | 'unknown';
 
@@ -22,6 +23,35 @@ class AppStateService {
         );
 
         console.log('AppState监听已初始化, 当前状态:', this.currentState);
+
+        // 应用启动时立即检查WebSocket状态
+        if (this.currentState === 'active') {
+            this.checkWebSocketConnection();
+        }
+    }
+
+    // 新增: 检查WebSocket连接方法
+    private async checkWebSocketConnection() {
+        try {
+            const { isAuthenticated } = useAuthStore.getState();
+
+            if (isAuthenticated && !WebSocketService.isConnected()) {
+                console.log('应用启动/恢复: 检测到WebSocket未连接，尝试重连...');
+
+                // 尝试从AsyncStorage中恢复会话信息
+                const sessionData = await AsyncStorage.getItem('websocket-session');
+                if (sessionData) {
+                    const session = JSON.parse(sessionData);
+                    WebSocketService.initialize(session);
+                    WebSocketService.connect();
+                    console.log('WebSocket连接已恢复');
+                } else {
+                    console.log('无法恢复WebSocket连接: 未找到会话信息');
+                }
+            }
+        } catch (error) {
+            console.error('WebSocket连接检查出错:', error);
+        }
     }
 
     private handleAppStateChange = async (nextAppState: AppStateStatus) => {
@@ -36,6 +66,9 @@ class AppStateService {
 
             // 检查会话状态
             const isSessionValid = await this.checkSession();
+
+            // 检查WebSocket连接状态 (新增)
+            await this.checkWebSocketConnection();
 
             EventEmitter.emit('APP_ACTIVE', {
                 needsReauthentication,

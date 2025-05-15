@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
+import {
+  StyleSheet,
+  View,
+  Text,
   ActivityIndicator,
   Alert
 } from 'react-native';
@@ -15,59 +15,99 @@ import { colors } from '@/constants/colors';
 import { useTopicStore } from '@/store/topic-store';
 import { useChatStore } from '@/store/chat-store';
 
+import ApiService from '@/services/api-service';
+import WebSocketService from '@/services/websocket-service';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function TopicChatScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { currentTopic, fetchTopicById, isLoading: isTopicLoading } = useTopicStore();
   const { createChat, isLoading: isChatLoading } = useChatStore();
-  
+
   const [isCreating, setIsCreating] = useState(false);
-  
+
   useEffect(() => {
     if (id) {
       fetchTopicById(id as string);
     }
   }, [id]);
-  
+
   const handleBack = () => {
     router.back();
   };
-  
+
   const handleJoinGroupChat = async () => {
     if (!currentTopic) return;
-    
+
+    // 确保chatId存在
+    if (!currentTopic.chatId) {
+      Alert.alert('错误', '此话题没有关联的聊天室');
+      return;
+    }
+
     setIsCreating(true);
-    
+
     try {
-      // Check if a group chat for this topic already exists
-      // For simplicity, we'll just create a new one
+      // 1. 调用API加入聊天室 - 使用类型安全的方式
+      const response = await ApiService.joinChat(
+        currentTopic.id,           // topic_uid
+        currentTopic.chatId        // chat_room_uid - 上面已检查存在性
+      );
+
+      if (response && response.code !== 0) {
+        throw new Error(response.message || "加入聊天室失败");
+      }
+
+      // 2. 过期时间处理 - 使用可选链和空值合并
+      const expiresAt = response?.data?.expires_at;
+
+      // 3. WebSocket连接 - 确保chatId不是undefined
+      if (WebSocketService.isConnected()) {
+        WebSocketService.joinChat(currentTopic.chatId);
+      } else {
+        console.warn("WebSocket未连接");
+      }
+
+      // 4. 创建聊天 - 使用非空断言或默认值
       const chatId = await createChat({
         isGroup: true,
-        name: `Discussion: ${currentTopic.title}`,
-        participants: [currentTopic.authorId],
+        name: `Discussion: ${currentTopic.title || "聊天室"}`,
+        participants: [currentTopic.authorId || ""],
         topicId: currentTopic.id,
+        ...(expiresAt ? { expiresAt } : {})
       });
-      
+
+      // 5. 本地存储 - 使用JSON.stringify的安全处理
+      try {
+        await AsyncStorage.setItem(
+          `topic-${currentTopic.id}`,
+          JSON.stringify(currentTopic)
+        );
+      } catch (storageError) {
+        console.warn('存储失败:', storageError);
+      }
+
       router.push(`/chat/${chatId}`);
     } catch (error) {
-      console.error('Error creating chat:', error);
-      Alert.alert('Error', 'Failed to create chat. Please try again.');
+      console.error('加入聊天室失败:', error);
+      Alert.alert('错误', '加入聊天室失败，请重试。');
     } finally {
       setIsCreating(false);
     }
   };
-  
+
   const handlePrivateChat = async () => {
     if (!currentTopic) return;
-    
+
     setIsCreating(true);
-    
+
     try {
       const chatId = await createChat({
         isGroup: false,
         participants: [currentTopic.authorId],
       });
-      
+
       router.push(`/chat/${chatId}`);
     } catch (error) {
       console.error('Error creating chat:', error);
@@ -76,7 +116,7 @@ export default function TopicChatScreen() {
       setIsCreating(false);
     }
   };
-  
+
   if (isTopicLoading || !currentTopic) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -84,10 +124,10 @@ export default function TopicChatScreen() {
       </SafeAreaView>
     );
   }
-  
+
   return (
     <>
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           title: 'Topic Chat',
           headerShown: true,
@@ -101,18 +141,18 @@ export default function TopicChatScreen() {
               iconPosition="left"
             />
           ),
-        }} 
+        }}
       />
-      
+
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <StatusBar style="dark" />
-        
+
         <View style={styles.content}>
           <Text style={styles.title}>Join the conversation</Text>
           <Text style={styles.subtitle}>
             Connect with others interested in "{currentTopic.title}"
           </Text>
-          
+
           <View style={styles.optionsContainer}>
             <View style={styles.option}>
               <Text style={styles.optionTitle}>Group Chat</Text>
@@ -127,9 +167,9 @@ export default function TopicChatScreen() {
                 style={styles.optionButton}
               />
             </View>
-            
+
             <View style={styles.divider} />
-            
+
             <View style={styles.option}>
               <Text style={styles.optionTitle}>Private Message</Text>
               <Text style={styles.optionDescription}>

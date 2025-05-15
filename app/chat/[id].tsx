@@ -105,8 +105,76 @@ export default function ChatScreen() {
     try {
       setIsSending(true);
 
-      // 使用WebSocket发送文本消息
+      // 添加WebSocket连接检查逻辑
       if (message.trim()) {
+        if (!WebSocketService.isConnected()) {
+          console.log('WebSocket未连接，尝试重新连接...');
+
+          // 显示连接中状态
+          setIsSending(true);
+
+          // 尝试重新连接
+          try {
+            // 检查是否有会话信息
+            if (!WebSocketService.isConnected()) {
+              // 尝试重新初始化和连接
+              const isReconnected = await new Promise((resolve, reject) => {
+                // 获取当前会话信息并重连
+                const { user } = useAuthStore.getState();
+
+                if (!user) {
+                  reject(new Error('无法重连: 未登录'));
+                  return;
+                }
+
+                // 如果需要，可以从AsyncStorage获取更完整的会话信息
+                // 这里简单使用当前用户信息
+                WebSocketService.checkAndReconnect();
+
+                // 等待连接建立
+                let attempts = 0;
+                const checkInterval = setInterval(() => {
+                  attempts++;
+                  if (WebSocketService.isConnected()) {
+                    clearInterval(checkInterval);
+                    resolve(true);
+                  } else if (attempts > 10) { // 5秒超时
+                    clearInterval(checkInterval);
+                    reject(new Error('WebSocket连接超时'));
+                  }
+                }, 500);
+              });
+
+              if (!isReconnected) {
+                throw new Error('无法建立WebSocket连接');
+              }
+            }
+          } catch (connError) {
+            console.error('WebSocket重连失败:', connError);
+            Alert.alert(
+              '连接问题',
+              '无法连接到消息服务器，您的消息可能无法发送。请检查网络连接后再试。',
+              [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '仍然尝试发送',
+                  onPress: () => {
+                    // 用户坚持要发送，尝试一次
+                    try {
+                      WebSocketService.sendMessage(message.trim(), chat.id);
+                    } catch (finalError) {
+                      console.error('强制发送消息失败:', finalError);
+                    }
+                  }
+                }
+              ]
+            );
+            setIsSending(false);
+            return;
+          }
+        }
+
+        // WebSocket已连接，发送消息
         WebSocketService.sendMessage(message.trim(), chat.id);
       }
 
@@ -125,7 +193,7 @@ export default function ChatScreen() {
       }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      Alert.alert('发送失败', '消息发送失败，请重试。');
     } finally {
       setIsSending(false);
     }

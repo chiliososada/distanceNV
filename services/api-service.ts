@@ -155,7 +155,26 @@ class ApiService {
 
 
 
+    // 加入聊天室的HTTP请求
+    async joinChat(topicUid: string, chatRoomUid: string): Promise<any> {
+        try {
+            const config = this.addAuthHeader({
+                timeout: 10000
+            });
 
+            const url = this.getUrl('/auth/chats/join');
+            const data = {
+                topic_uid: topicUid,
+                chat_room_uid: chatRoomUid
+            };
+
+            const response: AxiosResponse<any> = await axios.post(url, data, config);
+            return response.data;
+        } catch (error: any) {
+            this.handleApiError(error);
+            throw error;
+        }
+    }
 
 
 

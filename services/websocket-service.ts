@@ -1,6 +1,7 @@
 // services/websocket-service.ts
 import { nanoid } from 'nanoid';
 import { useChatStore } from '@/store/chat-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 聊天消息类型
 export interface ChatMessage {
@@ -60,6 +61,13 @@ class WebSocketService {
     public initialize(session: Session): void {
         this.session = session;
         this.reconnectAttempts = 0;
+
+        // 保存会话信息到AsyncStorage
+        try {
+            AsyncStorage.setItem('websocket-session', JSON.stringify(session));
+        } catch (error) {
+            console.error('保存WebSocket会话信息失败:', error);
+        }
     }
 
     // 连接WebSocket
@@ -156,9 +164,22 @@ class WebSocketService {
         }, delay) as unknown as number;
     }
 
+    public checkAndReconnect(): boolean {
+        if (!this.isConnected()) {
+            console.log('检测到WebSocket未连接，尝试重新连接...');
+            if (this.session) {
+                this.connect();
+                return true;
+            } else {
+                console.error('无法重连：缺少会话信息');
+                return false;
+            }
+        }
+        return true;
+    }
     // 发送消息
     public sendMessage(message: string, chatId: string): void {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (!this.checkAndReconnect()) {
             console.error('WebSocket未连接，无法发送消息');
             return;
         }
