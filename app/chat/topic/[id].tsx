@@ -62,22 +62,32 @@ export default function TopicChatScreen() {
       // 2. 过期时间处理 - 使用可选链和空值合并
       const expiresAt = response?.data?.expires_at;
 
-      // 3. WebSocket连接 - 确保chatId不是undefined
-      if (WebSocketService.isConnected()) {
-        WebSocketService.joinChat(currentTopic.chatId);
-      } else {
-        console.warn("WebSocket未连接");
+      // 3. WebSocket连接 - 确保连接并加入聊天室
+      try {
+        let wsConnected = false;
+        if (WebSocketService.isConnected()) {
+          wsConnected = await WebSocketService.joinChat(currentTopic.chatId);
+        } else {
+          console.log("WebSocket未连接，尝试连接...");
+          // 先连接WebSocket，然后加入聊天室
+          const connected = await WebSocketService.connectAsync();
+          if (connected) {
+            wsConnected = await WebSocketService.joinChat(currentTopic.chatId);
+          } else {
+            console.warn("WebSocket连接失败");
+          }
+        }
+
+        if (!wsConnected) {
+          console.warn("加入聊天室失败，但继续执行...");
+        }
+      } catch (wsError) {
+        console.error("WebSocket操作失败:", wsError);
+        // 即使WebSocket失败，也允许继续
       }
 
-      // 4. 创建聊天 - 使用非空断言或默认值
-      // const chatId = await createChat({
-      //   isGroup: true,
-      //   name: `Discussion: ${currentTopic.title || "聊天室"}`,
-      //   participants: [currentTopic.authorId || ""],
-      //   topicId: currentTopic.id,
-      //   ...(expiresAt ? { expiresAt } : {})
-      // });
-      const chatId = currentTopic.chatId
+      const chatId = currentTopic.chatId;
+
       // 5. 本地存储 - 使用JSON.stringify的安全处理
       try {
         await AsyncStorage.setItem(
@@ -89,6 +99,7 @@ export default function TopicChatScreen() {
       }
 
       router.push(`/chat/${chatId}`);
+      console.log(chatId);
     } catch (error) {
       console.error('加入聊天室失败:', error);
       Alert.alert('错误', '加入聊天室失败，请重试。');

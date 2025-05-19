@@ -273,12 +273,7 @@ export const useChatStore = create<ChatStore>()(
 
           set({ currentChat: mockChat, isLoading: false });
 
-          // 确保WebSocket连接
-          if (!WebSocketService.isConnected()) {
-            await WebSocketService.connectAsync();
-          }
-
-          // 加入聊天室WebSocket
+          // 尝试建立WebSocket连接，但即使失败也能继续
           WebSocketService.joinChat(id);
         } catch (error: any) {
           console.error("获取聊天详情失败:", error);

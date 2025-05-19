@@ -166,9 +166,19 @@ class WebSocketService {
             this.triggerConnectionStatusChange('connecting');
         }
 
-        // console.log(`正在连接到WebSocket: ${this.session.chat_url}`);
+        // 添加超时机制：30秒后自动返回false
+        const connectionTimeoutMs = 30000; // 30秒
+        let timeoutId: number | null = null;
 
-        this.connectingPromise = new Promise((resolve) => {
+        this.connectingPromise = new Promise<boolean>((resolve) => {
+            // 设置超时，防止永久挂起
+            timeoutId = setTimeout(() => {
+                console.error(`WebSocket连接超时 (${connectionTimeoutMs}ms)`);
+                this.triggerConnectionStatusChange('disconnected');
+                resolve(false);
+                this.connectingPromise = null;
+            }, connectionTimeoutMs) as unknown as number;
+
             try {
                 const session = this.session;
 
@@ -179,6 +189,10 @@ class WebSocketService {
                 this.ws = new WebSocket(session!.chat_url);
 
                 this.ws.onopen = () => {
+                    if (timeoutId !== null) {
+                        clearTimeout(timeoutId);
+                    }
+
                     console.log(`已连接到WebSocket: ${session!.chat_url}`);
                     this.triggerConnectionStatusChange('connected');
                     this.isReconnecting = false;
@@ -196,13 +210,12 @@ class WebSocketService {
                             this.reconnectAttempts = 0;
 
                             // 开始心跳检测
-                            this.startHeartbeat();
-
+                            //   this.startHeartbeat();
                             resolve(true);
 
                             // 处理等待的消息和聊天室
-                            this.processPendingMessages();
-                            this.processPendingChats();
+                            //  this.processPendingMessages();
+                            //  this.processPendingChats();
                         } catch (sendError) {
                             console.error('发送验证消息失败:', sendError);
                             this.triggerConnectionStatusChange('disconnected');
@@ -236,6 +249,10 @@ class WebSocketService {
                 };
 
                 this.ws.onerror = (error) => {
+                    if (timeoutId !== null) {
+                        clearTimeout(timeoutId);
+                    }
+
                     console.error('WebSocket错误:', error);
                     this.triggerConnectionStatusChange('disconnected');
                     resolve(false);
@@ -243,6 +260,10 @@ class WebSocketService {
                 };
 
                 this.ws.onclose = (event) => {
+                    if (timeoutId !== null) {
+                        clearTimeout(timeoutId);
+                    }
+
                     console.log(`WebSocket连接关闭: ${event.code} ${event.reason}`);
                     this.triggerConnectionStatusChange('disconnected');
                     this.stopHeartbeat();
@@ -255,6 +276,10 @@ class WebSocketService {
                     this.attemptReconnect();
                 };
             } catch (error) {
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                }
+
                 console.error('创建WebSocket连接失败:', error);
                 this.triggerConnectionStatusChange('disconnected');
                 resolve(false);
@@ -491,7 +516,7 @@ class WebSocketService {
                 "message_id": nanoid(),
                 "chat_id": chatId,
                 "at": new Date().toISOString(),
-                "img_url": imgUrl
+                // "img_url": imgUrl 需要修改
             }));
         } catch (error) {
             console.error('发送消息失败:', error);
@@ -504,6 +529,7 @@ class WebSocketService {
     // 加入聊天室
     public async joinChat(chatId: string): Promise<boolean> {
         return this.joinChats([chatId]);
+        //return true;
     }
 
     // 加入多个聊天室
@@ -519,17 +545,28 @@ class WebSocketService {
             return true;
         }
 
+        // 添加到待加入集合（无论连接状态如何都先添加）
+        validChatIds.forEach(id => this.pendingChats.add(id));
+
         // 确保WebSocket连接
         if (this.connectionState !== 'connected' || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            console.log('WebSocket未连接，将聊天室加入待处理列表');
+            console.log('WebSocket未连接，尝试连接后加入聊天室');
 
-            // 添加到待加入集合
-            validChatIds.forEach(id => this.pendingChats.add(id));
+            // 设置连接超时
+            const connectionTimeoutMs = 10000; // 10秒
+            const connectPromise = this.connectAsync();
+            const timeoutPromise = new Promise<boolean>(resolve => {
+                setTimeout(() => {
+                    console.log('加入聊天室超时');
+                    resolve(false);
+                }, connectionTimeoutMs);
+            });
 
+            // 使用Promise.race竞争超时
             try {
-                const connected = await this.connectAsync();
+                const connected = await Promise.race([connectPromise, timeoutPromise]);
                 if (!connected) {
-                    console.error('WebSocket连接失败，无法加入聊天室');
+                    console.error('WebSocket连接失败或超时，将在下次连接时处理待加入的聊天室');
                     return false;
                 }
             } catch (e) {
@@ -541,17 +578,33 @@ class WebSocketService {
         console.log('加入聊天室:', validChatIds);
 
         try {
-            this.ws!.send(JSON.stringify({
-                "type": "Join",
-                "chat_id": validChatIds
-            }));
-            return true;
+            // 设置操作超时保护
+            const sendTimeoutMs = 5000; // 5秒
+            let success = false;
+
+            // 使用带超时的Promise
+            await Promise.race([
+                new Promise<void>(resolve => {
+                    this.ws!.send(JSON.stringify({
+                        "type": "Join",
+                        "chat_id": validChatIds
+                    }));
+                    success = true;
+                    resolve();
+                })
+                ,
+                new Promise<void>(resolve => {
+                    setTimeout(() => {
+                        console.log('发送加入聊天室请求超时');
+                        resolve();
+                    }, sendTimeoutMs);
+                })
+            ]);
+
+            return success;
         } catch (error) {
             console.error('加入聊天室失败:', error);
-
-            // 添加到待加入集合
-            validChatIds.forEach(id => this.pendingChats.add(id));
-
+            // 已添加到pendingChats，会在下次连接时自动处理
             this.reconnect();
             return false;
         }

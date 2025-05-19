@@ -114,17 +114,22 @@ export default function ChatScreen() {
   }, [connectionStatus]);
 
   const handleSend = async () => {
-    if ((!messageText.trim() && !selectedImage) || !user || !chat) return;
+    //if ((!messageText.trim() && !selectedImage) || !user || !chat) return;
 
     try {
       setIsSending(true);
 
+
+
       // 使用统一的发送消息方法
       await sendMessage({
         content: messageText.trim(),
-        chatId: chat.id,
+        chatId: "66dcb853-0ef3-4c50-8839-ac299ba704c6",
         images: selectedImage ? [selectedImage] : undefined
       });
+
+
+
 
       // 清空输入框和选中的图片
       setMessageText('');
@@ -228,8 +233,8 @@ export default function ChatScreen() {
     }
   };
 
-  // 仅在初始加载时显示加载指示器
-  if (isLoading && !chat) {
+  // 仅在初始加载时显示加载指示器isLoading && !chat
+  if (false) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -250,8 +255,8 @@ export default function ChatScreen() {
       </SafeAreaView>
     );
   }
-
-  if (!chat) {
+  //!chat
+  if (false) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -259,9 +264,99 @@ export default function ChatScreen() {
     );
   }
 
-  const otherUser = chat.participants.find((p: any) => p.id !== user?.id);
-  const chatMessages = messages[chat.id] || [];
+  //const otherUser = chat.participants.find((p: any) => p.id !== user?.id);
+  const otherUser = {
+    id: "other-user",
+    type: 'person' as 'person',
+    email: 'other@example.com',
+    username: 'otheruser',
+    displayName: '其他用户',
+    avatar: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    followersCount: 10,
+    followingCount: 5,
+    topicsCount: 3,
+    likesCount: 20,
+    lastActiveAt: new Date().toISOString(),
+    isOnline: true
+  };
 
+  //const chatMessages = messages[chat.id] || [];
+  const chatMessages = [
+    {
+      id: "msg-1",
+      content: "你好，我是其他用户",
+      senderId: "other-user",
+      sender: {
+        id: "other-user",
+        type: "person",
+        email: "other@example.com",
+        username: "otheruser",
+        displayName: "其他用户",
+        avatar: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        followersCount: 5,
+        followingCount: 2,
+        topicsCount: 1,
+        likesCount: 8,
+        lastActiveAt: new Date().toISOString()
+      },
+      chatId: "chat-123",
+      createdAt: new Date().toISOString(),
+      readBy: ["current-user"],
+      status: "read"
+    },
+    {
+      id: "msg-2",
+      content: "有空，我们几点见？",
+      senderId: "current-user",
+      sender: {
+        id: "current-user",
+        type: "person",
+        email: "me@example.com",
+        username: "me",
+        displayName: "当前用户",
+        avatar: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        followersCount: 0,
+        followingCount: 0,
+        topicsCount: 0,
+        likesCount: 0,
+        lastActiveAt: new Date().toISOString()
+      },
+      chatId: "chat-123",
+      createdAt: new Date().toISOString(),
+      readBy: ["other-user"],
+      status: "sent"
+    },
+    {
+      id: "msg-3",
+      content: "下午三点怎么样？",
+      senderId: "other-user",
+      sender: {
+        id: "other-user",
+        type: "person",
+        email: "other@example.com",
+        username: "otheruser",
+        displayName: "其他用户",
+        avatar: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        followersCount: 5,
+        followingCount: 2,
+        topicsCount: 1,
+        likesCount: 8,
+        lastActiveAt: new Date().toISOString()
+      },
+      chatId: "chat-123",
+      createdAt: new Date().toISOString(),
+      readBy: [],
+      status: "delivered"
+    }
+  ];
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <StatusBar style="dark" />
