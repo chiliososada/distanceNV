@@ -7,6 +7,8 @@ import { useAuthStore } from './auth-store';
 import { ChatMessage } from '@/services/websocket-service';
 import ApiService from '@/services/api-service';
 import WebSocketService from '@/services/websocket-service';
+import EventEmitter from '@/utils/event-emitter';
+import FirebaseStorageService from '@/services/firebase-storage-service';
 
 // 类型转换函数 - 将API响应转换为应用内部类型
 const convertApiChatToChat = (apiChat: any): Chat => {
@@ -48,6 +50,7 @@ const convertApiChatToChat = (apiChat: any): Chat => {
       createdAt: apiChat.last_message.created_at,
       readBy: apiChat.last_message.read_by || [],
       images: apiChat.last_message.images || [],
+      status: 'delivered',
     } : undefined,
     createdAt: apiChat.created_at,
     updatedAt: apiChat.updated_at,
@@ -79,7 +82,38 @@ const convertApiMessageToMessage = (apiMessage: any): Message => {
     createdAt: apiMessage.created_at,
     readBy: apiMessage.read_by || [],
     images: apiMessage.images || [],
+    status: 'delivered',
   };
+};
+
+// 上传图片到存储
+const uploadImageToStorage = async (imagePath: string, chatId: string): Promise<string> => {
+  if (!imagePath) return '';
+
+  try {
+    // 如果已经是存储路径，直接返回
+    if (!imagePath.startsWith('file://') && !imagePath.startsWith('content://')) {
+      return imagePath;
+    }
+
+    // 从URI加载图片数据
+    const response = await fetch(imagePath);
+    const blob = await response.blob();
+
+    // 上传到Firebase Storage
+    const path = await FirebaseStorageService.uploadImage(
+      blob,
+      'chats',
+      chatId,
+      undefined,
+      (progress) => console.log(`上传进度: ${progress}%`)
+    );
+
+    return path;
+  } catch (error) {
+    console.error('上传图片到存储失败:', error);
+    throw error;
+  }
 };
 
 interface ChatState {
@@ -88,19 +122,24 @@ interface ChatState {
   messages: Record<string, Message[]>;
   isLoading: boolean;
   error: string | null;
+  connectionStatus: 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
+  pendingMessages: Message[];
 }
 
 export interface ChatStore extends ChatState {
   fetchChats: () => Promise<void>;
   fetchChatById: (id: string) => Promise<void>;
   fetchMessages: (chatId: string) => Promise<void>;
-  sendMessage: (message: CreateMessagePayload) => Promise<void>;
+  sendMessage: (message: CreateMessagePayload & { retryMessageId?: string }) => Promise<void>;
   createChat: (chatData: CreateChatPayload) => Promise<string>;
   markChatAsRead: (chatId: string) => Promise<void>;
   updateChatSettings: (chatId: string, settings: Partial<Chat>) => Promise<void>;
   // WebSocket相关方法
   addWebSocketMessage: (message: ChatMessage) => void;
   joinChatRooms: (chatIds: string[]) => void;
+  processNextPendingMessage: () => Promise<void>;
+  updateMessageStatus: (messageId: string, chatId: string, status: string) => void;
+  setConnectionStatus: (status: 'connected' | 'connecting' | 'reconnecting' | 'disconnected') => void;
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -111,6 +150,13 @@ export const useChatStore = create<ChatStore>()(
       messages: {},
       isLoading: false,
       error: null,
+      connectionStatus: 'disconnected',
+      pendingMessages: [],
+
+      // 设置连接状态
+      setConnectionStatus: (status) => {
+        set({ connectionStatus: status });
+      },
 
       fetchChats: async () => {
         set({ isLoading: true, error: null });
@@ -130,6 +176,12 @@ export const useChatStore = create<ChatStore>()(
 
           // 加入所有聊天室的WebSocket
           const chatIds = chats.map(chat => chat.id);
+
+          // 确保WebSocket连接
+          if (!WebSocketService.isConnected()) {
+            await WebSocketService.connectAsync();
+          }
+
           WebSocketService.joinChats(chatIds);
 
         } catch (error: any) {
@@ -151,6 +203,11 @@ export const useChatStore = create<ChatStore>()(
           const chat = convertApiChatToChat(response.data.chat);
 
           set({ currentChat: chat, isLoading: false });
+
+          // 确保WebSocket连接
+          if (!WebSocketService.isConnected()) {
+            await WebSocketService.connectAsync();
+          }
 
           // 加入聊天室WebSocket
           WebSocketService.joinChat(id);
@@ -180,13 +237,16 @@ export const useChatStore = create<ChatStore>()(
 
           set({ messages: updatedMessages, isLoading: false });
 
+          // 标记为已读
+          get().markChatAsRead(chatId);
+
         } catch (error: any) {
           console.error("获取消息失败:", error);
           set({ error: error.message || "获取消息失败", isLoading: false });
         }
       },
 
-      sendMessage: async (messageData: CreateMessagePayload) => {
+      sendMessage: async ({ content, chatId, images, retryMessageId }) => {
         try {
           const user = useAuthStore.getState().user;
 
@@ -194,59 +254,156 @@ export const useChatStore = create<ChatStore>()(
             throw new Error("未认证");
           }
 
-          const chatId = messageData.chatId;
-          const content = messageData.content || "";
+          let messageId = retryMessageId || `temp-${Date.now()}`;
+          let uploadedImages: string[] = [];
 
-          // 1. 乐观更新UI - 先在本地添加消息
-          const newMessage: Message = {
-            id: `temp-${Date.now()}`, // 临时ID，后端返回后会更新
-            content: content,
-            senderId: user.id,
-            sender: user,
-            chatId,
-            createdAt: new Date().toISOString(),
-            readBy: [user.id],
-            images: messageData.images,
-          };
+          // 先检查连接状态
+          if (get().connectionStatus === 'disconnected') {
+            // 如果是重试，先设置状态为正在发送
+            if (retryMessageId) {
+              get().updateMessageStatus(retryMessageId, chatId, 'sending');
+            }
 
-          // 更新本地状态
-          const currentMessages = { ...get().messages };
-          const chatMessages = currentMessages[chatId] || [];
-          currentMessages[chatId] = [...chatMessages, newMessage];
+            // 尝试重新连接
+            try {
+              set({ connectionStatus: 'connecting' });
+              const connected = await WebSocketService.connectAsync();
 
-          // 更新聊天的最后一条消息和未读数
-          const currentChats = [...get().chats];
-          const chatIndex = currentChats.findIndex(c => c.id === chatId);
+              if (!connected) {
+                throw new Error("无法连接到消息服务器");
+              }
 
-          if (chatIndex !== -1) {
-            currentChats[chatIndex] = {
-              ...currentChats[chatIndex],
-              lastMessage: newMessage,
-              updatedAt: new Date().toISOString(),
-            };
+              set({ connectionStatus: 'connected' });
+            } catch (connError) {
+              set({ connectionStatus: 'disconnected' });
+              throw new Error("无法连接到消息服务器，请检查网络连接");
+            }
           }
 
-          set({
-            messages: currentMessages,
-            chats: currentChats
-          });
+          // 处理图片上传
+          if (images && images.length > 0) {
+            try {
+              // 上传所有图片
+              const uploadPromises = images.map(img => uploadImageToStorage(img, chatId));
+              uploadedImages = await Promise.all(uploadPromises);
+            } catch (uploadError) {
+              console.error("上传图片失败:", uploadError);
+              // 如果是重试消息，将其状态设为失败
+              if (retryMessageId) {
+                get().updateMessageStatus(retryMessageId, chatId, 'failed');
+              }
+              throw new Error("上传图片失败");
+            }
+          }
+
+          // 如果是重试，使用现有的临时消息
+          // 如果不是重试，创建新的临时消息
+          if (!retryMessageId) {
+            // 1. 乐观更新UI - 先在本地添加临时消息
+            const tempMessage: Message = {
+              id: messageId,
+              content: content || "",
+              senderId: user.id,
+              sender: user,
+              chatId,
+              createdAt: new Date().toISOString(),
+              readBy: [user.id],
+              images: uploadedImages.length > 0 ? uploadedImages : undefined,
+              status: 'sending'
+            };
+
+            // 更新本地状态
+            const currentMessages = { ...get().messages };
+            const chatMessages = currentMessages[chatId] || [];
+            currentMessages[chatId] = [...chatMessages, tempMessage];
+
+            // 更新聊天的最后一条消息和未读数
+            const currentChats = [...get().chats];
+            const chatIndex = currentChats.findIndex(c => c.id === chatId);
+
+            if (chatIndex !== -1) {
+              currentChats[chatIndex] = {
+                ...currentChats[chatIndex],
+                lastMessage: tempMessage,
+                updatedAt: new Date().toISOString(),
+              };
+            }
+
+            set({
+              messages: currentMessages,
+              chats: currentChats
+            });
+          }
 
           // 2. 通过WebSocket发送消息
-          WebSocketService.sendMessage(content, chatId);
-
-          // 3. 如果有图片，还需要上传图片
-          if (messageData.images && messageData.images.length > 0) {
-            // 在实际应用中，这里应该有上传图片的逻辑
-            // 上传完成后，可能需要再发送一条带图片的消息或更新当前消息
-
-            // 示例：上传图片后发送消息
-            // await ApiService.post(`/auth/chats/${chatId}/upload-images`, { images: messageData.images });
-            // WebSocketService.sendMessage("📷 图片", chatId);
+          if (content) {
+            WebSocketService.sendMessage(content, chatId);
           }
+
+          // 3. 如果有图片，为每张图片发送一条图片消息
+          if (uploadedImages.length > 0) {
+            for (const imgPath of uploadedImages) {
+              // 延迟一些再发送图片消息(避免并发请求过多)
+              await new Promise(resolve => setTimeout(resolve, 300));
+              WebSocketService.sendMessage(`[图片]`, chatId, imgPath);
+            }
+          }
+
+          // 4. 更新消息状态为已发送
+          get().updateMessageStatus(messageId, chatId, 'sent');
 
         } catch (error: any) {
           console.error("发送消息失败:", error);
-          // 可以考虑更新UI状态，显示发送失败
+
+          // 更新消息状态为发送失败
+          if (retryMessageId) {
+            get().updateMessageStatus(retryMessageId, chatId, 'failed');
+          } else {
+            get().updateMessageStatus(`temp-${Date.now()}`, chatId, 'failed');
+          }
+
+          throw error;
+        }
+      },
+
+      // 更新消息状态的辅助方法
+      updateMessageStatus: (messageId, chatId, status) => {
+        const { messages } = get();
+        const chatMessages = messages[chatId] || [];
+
+        // 查找消息
+        const messageIndex = chatMessages.findIndex(m => m.id === messageId);
+        if (messageIndex === -1) return;
+
+        // 创建更新后的消息列表
+        const updatedMessages = { ...messages };
+        const updatedChatMessages = [...chatMessages];
+
+        // 更新消息状态
+        updatedChatMessages[messageIndex] = {
+          ...updatedChatMessages[messageIndex],
+          status
+        };
+
+        updatedMessages[chatId] = updatedChatMessages;
+
+        // 更新状态
+        set({ messages: updatedMessages });
+
+        // 同时更新聊天列表中的最后一条消息
+        const chats = [...get().chats];
+        const chatIndex = chats.findIndex(c => c.id === chatId);
+
+        if (chatIndex !== -1 && chats[chatIndex].lastMessage?.id === messageId) {
+          chats[chatIndex] = {
+            ...chats[chatIndex],
+            lastMessage: {
+              ...chats[chatIndex].lastMessage!,
+              status
+            }
+          };
+
+          set({ chats });
         }
       },
 
@@ -295,6 +452,11 @@ export const useChatStore = create<ChatStore>()(
           // 获取新创建的聊天详情
           await get().fetchChatById(newChatId);
 
+          // 确保WebSocket连接
+          if (!WebSocketService.isConnected()) {
+            await WebSocketService.connectAsync();
+          }
+
           // 加入WebSocket聊天室
           WebSocketService.joinChat(newChatId);
 
@@ -340,6 +502,7 @@ export const useChatStore = create<ChatStore>()(
                 return {
                   ...message,
                   readBy: [...message.readBy, user.id],
+                  status: 'read'
                 };
               }
               return message;
@@ -423,6 +586,9 @@ export const useChatStore = create<ChatStore>()(
           chatId: message.chat_id,
           createdAt: message.at,
           readBy: [message.user_id],
+          // 如果消息中包含图片URL
+          images: message.img_url ? [message.img_url] : undefined,
+          status: 'delivered'
         };
 
         // 更新消息列表
@@ -463,15 +629,134 @@ export const useChatStore = create<ChatStore>()(
           messages: updatedMessages,
           chats: updatedChats
         });
+
+        // 处理当前用户发送的消息确认
+        const currentUserId = useAuthStore.getState().user?.id;
+        if (message.user_id === currentUserId) {
+          // 在用户发送的临时消息中查找与此消息内容匹配的项
+          const tempMessageIndex = chatMessages.findIndex(msg =>
+            msg.senderId === currentUserId &&
+            msg.status === 'sending' &&
+            msg.content === message.message
+          );
+
+          if (tempMessageIndex !== -1) {
+            // 找到临时消息，将其ID和状态更新为真实消息ID和已发送状态
+            const tempId = chatMessages[tempMessageIndex].id;
+
+            // 创建新的消息数组，替换旧的临时消息
+            const newChatMessages = [...chatMessages];
+            newChatMessages[tempMessageIndex] = {
+              ...newChatMessages[tempMessageIndex],
+              id: message.message_id,
+              status: 'delivered',
+              createdAt: message.at
+            };
+
+            updatedMessages[chatId] = newChatMessages;
+
+            // 如果需要更新最后一条消息
+            if (updatedChats[chatIndex]?.lastMessage?.id === tempId) {
+              updatedChats[chatIndex] = {
+                ...updatedChats[chatIndex],
+                lastMessage: {
+                  ...updatedChats[chatIndex].lastMessage!,
+                  id: message.message_id,
+                  status: 'delivered',
+                  createdAt: message.at
+                }
+              };
+            }
+
+            set({
+              messages: updatedMessages,
+              chats: updatedChats
+            });
+          }
+        }
       },
 
       joinChatRooms: (chatIds: string[]) => {
         WebSocketService.joinChats(chatIds);
+      },
+
+      // 处理待发送消息队列
+      processNextPendingMessage: async () => {
+        const { pendingMessages } = get();
+
+        if (pendingMessages.length === 0) return;
+
+        // 取出第一条待发送消息
+        const [nextMessage, ...remainingMessages] = pendingMessages;
+
+        // 更新状态，移除该消息
+        set({ pendingMessages: remainingMessages });
+
+        try {
+          // 尝试发送消息
+          await get().sendMessage({
+            content: nextMessage.content,
+            chatId: nextMessage.chatId,
+            images: nextMessage.images,
+            retryMessageId: nextMessage.id
+          });
+        } catch (error) {
+          console.error('处理待发送消息失败:', error);
+          // 将消息重新加入队列末尾
+          set({ pendingMessages: [...remainingMessages, nextMessage] });
+        }
       }
     }),
     {
       name: 'chat-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        chats: state.chats,
+        // 仅持久化状态不是'failed'的消息
+        messages: Object.entries(state.messages).reduce((acc, [chatId, msgs]) => {
+          acc[chatId] = msgs.filter(m => m.status !== 'failed');
+          return acc;
+        }, {} as Record<string, Message[]>),
+        pendingMessages: state.pendingMessages.filter(m => m.status !== 'failed'),
+      }),
     }
   )
 );
+
+// 监听WebSocket连接状态变化
+WebSocketService.onConnectionStatusChange((status) => {
+  const chatStore = useChatStore.getState();
+
+  switch (status) {
+    case 'connected':
+      chatStore.setConnectionStatus('connected');
+
+      // 处理待发送的消息
+      chatStore.processNextPendingMessage();
+      break;
+
+    case 'connecting':
+      chatStore.setConnectionStatus('connecting');
+      break;
+
+    case 'reconnecting':
+      chatStore.setConnectionStatus('reconnecting');
+      break;
+
+    case 'disconnected':
+      chatStore.setConnectionStatus('disconnected');
+      break;
+  }
+});
+
+// 监听WebSocket消息
+WebSocketService.onMessage((message) => {
+  const chatStore = useChatStore.getState();
+  chatStore.addWebSocketMessage(message);
+});
+
+// 注册WebSocket连接丢失事件处理
+EventEmitter.on('WEBSOCKET_CONNECTION_LOST', () => {
+  const chatStore = useChatStore.getState();
+  chatStore.setConnectionStatus('disconnected');
+});

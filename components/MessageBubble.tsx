@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image, Dimensions, ActivityIndicator } from 'react-native';
 import { colors } from '@/constants/colors';
 import { formatMessageTime } from '@/utils/date';
 import { Message } from '@/types/chat';
 import { Avatar } from './Avatar';
+import { Check, Clock, AlertCircle, RotateCcw } from 'lucide-react-native';
 
 interface MessageBubbleProps {
   message: Message;
@@ -13,12 +14,14 @@ interface MessageBubbleProps {
   name?: string;
   onUserPress?: (userId: string) => void;
   onImagePress?: (imageUrl: string) => void;
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  onResend?: () => void;
 }
 
-// 获取屏幕宽度用于计算图片尺寸
+// 设置最大图片尺寸
 const { width: screenWidth } = Dimensions.get('window');
-const MAX_IMAGE_WIDTH = screenWidth * 0.6; // 设置最大图片宽度为屏幕宽度的60%
-const MAX_IMAGE_HEIGHT = 250; // 设置最大图片高度
+const MAX_IMAGE_WIDTH = screenWidth * 0.6;
+const MAX_IMAGE_HEIGHT = 250;
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
@@ -28,9 +31,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   name,
   onUserPress,
   onImagePress,
+  status,
+  onResend,
 }) => {
-  // 添加状态来追踪每个图片加载的尺寸
+  // 添加状态来跟踪图片尺寸
   const [imageSize, setImageSize] = useState({ width: MAX_IMAGE_WIDTH, height: 150 });
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const handleUserPress = () => {
     if (onUserPress && message.sender) {
@@ -44,9 +51,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   };
 
-  // 计算图片尺寸的函数
+  // 处理图片尺寸
   const calculateImageSize = (imageUrl: string) => {
     if (!imageUrl) return;
+
+    setImageLoading(true);
+    setImageError(false);
 
     Image.getSize(imageUrl, (width, height) => {
       // 计算宽高比
@@ -68,11 +78,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       }
 
       // 更新尺寸状态
-      setImageSize({ width: calculatedWidth, height: calculatedHeight });
+      setImageSize({
+        width: calculatedWidth,
+        height: calculatedHeight
+      });
+      setImageLoading(false);
     }, error => {
-      console.error("Error getting image size: ", error);
-      // 发生错误时使用默认尺寸
+      console.error("获取图片尺寸失败: ", error);
+      // 出错时使用默认尺寸
       setImageSize({ width: MAX_IMAGE_WIDTH, height: 150 });
+      setImageLoading(false);
+      setImageError(true);
     });
   };
 
@@ -83,8 +99,46 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     }
   }, [message.images]);
 
-  const screenWidth = Dimensions.get('window').width;
-  const maxBubbleWidth = screenWidth * 0.75; // 75% of screen width
+  // 渲染消息状态指示器
+  const renderStatusIndicator = () => {
+    if (!isOwnMessage) return null;
+
+    // 使用message.status或传入的status属性
+    const messageStatus = status || message.status;
+
+    switch (messageStatus) {
+      case 'sending':
+        return <Clock size={12} color={colors.textSecondary} />;
+      case 'sent':
+        return <Check size={12} color={colors.textSecondary} />;
+      case 'delivered':
+        return (
+          <View style={styles.doubleCheck}>
+            <Check size={12} color={colors.textSecondary} />
+            <Check size={12} color={colors.textSecondary} style={styles.secondCheck} />
+          </View>
+        );
+      case 'read':
+        return (
+          <View style={styles.doubleCheck}>
+            <Check size={12} color={colors.primary} />
+            <Check size={12} color={colors.primary} style={styles.secondCheck} />
+          </View>
+        );
+      case 'failed':
+        return (
+          <TouchableOpacity onPress={onResend} style={styles.retryButton}>
+            <AlertCircle size={12} color={colors.error} />
+            <RotateCcw size={12} color={colors.error} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // 限制消息气泡最大宽度
+  const maxBubbleWidth = screenWidth * 0.75;
 
   return (
     <View
@@ -109,7 +163,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         style={[
           styles.bubbleContainer,
           isOwnMessage ? styles.ownBubble : styles.otherBubble,
-          { maxWidth: maxBubbleWidth }
+          { maxWidth: maxBubbleWidth },
+          message.status === 'failed' && styles.failedBubble
         ]}
       >
         {!isOwnMessage && message.sender && (
@@ -131,29 +186,43 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 key={index}
                 onPress={() => handleImagePress(imageUrl)}
                 activeOpacity={0.9}
+                style={styles.imageWrapper}
               >
-                <Image
-                  source={{ uri: imageUrl }}
-                  style={[
-                    styles.messageImage,
-                    // 应用计算出的尺寸
-                    {
-                      width: imageSize.width,
-                      height: imageSize.height,
-                    }
-                  ]}
-                  resizeMode="contain"
-                />
+                {imageLoading ? (
+                  <View style={[styles.imageLoading, { width: imageSize.width, height: imageSize.height }]}>
+                    <ActivityIndicator color={colors.primary} size="small" />
+                  </View>
+                ) : imageError ? (
+                  <View style={[styles.imageError, { width: imageSize.width, height: imageSize.height }]}>
+                    <AlertCircle size={24} color={colors.error} />
+                    <Text style={styles.imageErrorText}>加载失败</Text>
+                  </View>
+                ) : (
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={[
+                      styles.messageImage,
+                      {
+                        width: imageSize.width,
+                        height: imageSize.height,
+                      }
+                    ]}
+                    resizeMode="contain"
+                  />
+                )}
               </TouchableOpacity>
             ))}
           </View>
         ) : null}
 
-        <Text
-          style={[styles.timestamp, isOwnMessage && styles.ownTimestamp]}
-        >
-          {formatMessageTime(message.createdAt)}
-        </Text>
+        <View style={styles.messageFooter}>
+          {renderStatusIndicator()}
+          <Text
+            style={[styles.timestamp, isOwnMessage && styles.ownTimestamp]}
+          >
+            {formatMessageTime(message.createdAt)}
+          </Text>
+        </View>
       </View>
 
       {isOwnMessage && showAvatar ? (
@@ -206,6 +275,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderBottomLeftRadius: 4,
   },
+  failedBubble: {
+    backgroundColor: 'rgba(245, 54, 92, 0.1)', // 轻微红色背景表示发送失败
+    borderColor: colors.error,
+    borderWidth: 1,
+  },
   senderName: {
     fontSize: 13,
     fontWeight: '600',
@@ -222,21 +296,56 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     marginTop: 8,
-    borderRadius: 12,
+  },
+  imageWrapper: {
+    borderRadius: 8,
     overflow: 'hidden',
+    marginTop: 4,
   },
   messageImage: {
-    // 基础样式，宽高将通过动态计算覆盖
     borderRadius: 8,
+  },
+  imageLoading: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 8,
+  },
+  imageError: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 54, 92, 0.1)',
+    borderRadius: 8,
+  },
+  imageErrorText: {
+    fontSize: 12,
+    color: colors.error,
+    marginTop: 4,
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     marginTop: 4,
   },
   timestamp: {
     fontSize: 12,
     color: colors.textSecondary,
-    alignSelf: 'flex-end',
-    marginTop: 4,
+    marginLeft: 4,
   },
   ownTimestamp: {
     color: 'rgba(255, 255, 255, 0.8)',
+  },
+  doubleCheck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  secondCheck: {
+    marginLeft: -4,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 4,
   },
 });

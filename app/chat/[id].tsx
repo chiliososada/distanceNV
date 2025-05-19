@@ -21,7 +21,9 @@ import {
   Send,
   Image as ImageIcon,
   Info,
-  X
+  X,
+  AlertCircle,
+  Loader
 } from 'lucide-react-native';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
@@ -30,8 +32,7 @@ import { useChatStore } from '@/store/chat-store';
 import { useAuthStore } from '@/store/auth-store';
 import { Message } from '@/types/chat';
 import { ImageViewer } from '@/components/ImageViewer';
-
-import WebSocketService from '@/services/websocket-service';
+import FirebaseStorageService from '@/services/firebase-storage-service';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,34 +46,36 @@ export default function ChatScreen() {
     sendMessage,
     markChatAsRead,
     isLoading,
-    error
+    error,
+    connectionStatus,
   } = useChatStore();
 
-  const [message, setMessage] = useState('');
+  const [messageText, setMessageText] = useState('');
   const [chat, setChat] = useState<any>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
-  // Track if initial fetch has been done
+  // 跟踪初始加载和已读标记
   const initialFetchDoneRef = useRef(false);
   const markAsReadDoneRef = useRef(false);
 
   useEffect(() => {
     if (id) {
-      // Find chat in the store
+      // 查找缓存中的聊天
       const chatData = chats.find(c => c.id === id);
       if (chatData) {
         setChat(chatData);
 
-        // Only fetch messages if we haven't already or if they're not in the store
+        // 仅在首次加载时获取消息
         if (!initialFetchDoneRef.current && (!messages[id] || messages[id].length === 0)) {
           fetchMessages(id);
           initialFetchDoneRef.current = true;
         }
 
-        // Mark chat as read when entering
+        // 标记聊天为已读
         if (!markAsReadDoneRef.current && chatData.unreadCount > 0) {
           markChatAsRead(id);
           markAsReadDoneRef.current = true;
@@ -83,117 +86,57 @@ export default function ChatScreen() {
     }
   }, [id, chats]);
 
-  // Update chat when messages change
+  // 监听消息变化
   useEffect(() => {
     if (id && messages[id] && chat) {
       setChat({
         ...chat,
         messages: messages[id] || []
       });
+
+      // 当新消息到达时自动滚动到底部
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   }, [id, messages]);
 
-  const handleSend = async () => {
-    if ((!message.trim() && !selectedImage) || !user || !chat) return;
+  // 监听连接状态变化
+  useEffect(() => {
+    if (connectionStatus === 'disconnected') {
+      // 显示断开连接提示
+      Alert.alert(
+        "连接已断开",
+        "无法连接到消息服务器，请检查网络连接后重试。",
+        [{ text: "确定" }]
+      );
+    }
+  }, [connectionStatus]);
 
-    const messageData = {
-      content: message.trim(),
-      chatId: chat.id,
-      images: selectedImage ? [selectedImage] : undefined
-    };
+  const handleSend = async () => {
+    if ((!messageText.trim() && !selectedImage) || !user || !chat) return;
 
     try {
       setIsSending(true);
 
-      // 添加WebSocket连接检查逻辑
-      if (message.trim()) {
-        if (!WebSocketService.isConnected()) {
-          console.log('WebSocket未连接，尝试重新连接...');
+      // 使用统一的发送消息方法
+      await sendMessage({
+        content: messageText.trim(),
+        chatId: chat.id,
+        images: selectedImage ? [selectedImage] : undefined
+      });
 
-          // 显示连接中状态
-          setIsSending(true);
-
-          // 尝试重新连接
-          try {
-            // 检查是否有会话信息
-            if (!WebSocketService.isConnected()) {
-              // 尝试重新初始化和连接
-              const isReconnected = await new Promise((resolve, reject) => {
-                // 获取当前会话信息并重连
-                const { user } = useAuthStore.getState();
-
-                if (!user) {
-                  reject(new Error('无法重连: 未登录'));
-                  return;
-                }
-
-                // 如果需要，可以从AsyncStorage获取更完整的会话信息
-                // 这里简单使用当前用户信息
-                WebSocketService.checkAndReconnect();
-
-                // 等待连接建立
-                let attempts = 0;
-                const checkInterval = setInterval(() => {
-                  attempts++;
-                  if (WebSocketService.isConnected()) {
-                    clearInterval(checkInterval);
-                    resolve(true);
-                  } else if (attempts > 10) { // 5秒超时
-                    clearInterval(checkInterval);
-                    reject(new Error('WebSocket连接超时'));
-                  }
-                }, 500);
-              });
-
-              if (!isReconnected) {
-                throw new Error('无法建立WebSocket连接');
-              }
-            }
-          } catch (connError) {
-            console.error('WebSocket重连失败:', connError);
-            Alert.alert(
-              '连接问题',
-              '无法连接到消息服务器，您的消息可能无法发送。请检查网络连接后再试。',
-              [
-                { text: '取消', style: 'cancel' },
-                {
-                  text: '仍然尝试发送',
-                  onPress: () => {
-                    // 用户坚持要发送，尝试一次
-                    try {
-                      WebSocketService.sendMessage(message.trim(), chat.id);
-                    } catch (finalError) {
-                      console.error('强制发送消息失败:', finalError);
-                    }
-                  }
-                }
-              ]
-            );
-            setIsSending(false);
-            return;
-          }
-        }
-
-        // WebSocket已连接，发送消息
-        WebSocketService.sendMessage(message.trim(), chat.id);
-      }
-
-      // 如果有图片，先上传然后再发送
-      if (selectedImage) {
-        // 上传图片的逻辑...
-        // 图片上传完成后，可以再发送一条包含图片URL的消息
-      }
-
-      setMessage('');
+      // 清空输入框和选中的图片
+      setMessageText('');
       setSelectedImage(null);
 
-      // Scroll to bottom after sending
+      // 滚动到底部
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('发送失败', '消息发送失败，请重试。');
+      console.error('发送消息失败:', error);
+      Alert.alert('发送失败', '消息发送失败，请稍后重试');
     } finally {
       setIsSending(false);
     }
@@ -211,15 +154,15 @@ export default function ChatScreen() {
 
   const handleImageUpload = async () => {
     try {
-      // Request permission
+      // 请求权限
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+        Alert.alert('需要权限', '请允许访问您的相册以上传图片');
         return;
       }
 
-      // Launch image picker
+      // 启动图片选择器
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -228,11 +171,41 @@ export default function ChatScreen() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedImage(result.assets[0].uri);
+        setIsUploading(true);
+        try {
+          // 上传图片到存储服务
+          const uploadedPath = await uploadImageToStorage(result.assets[0].uri, chat.id);
+          setSelectedImage(uploadedPath);
+        } catch (uploadError) {
+          console.error('上传图片失败:', uploadError);
+          Alert.alert('上传失败', '图片上传失败，请重试');
+        } finally {
+          setIsUploading(false);
+        }
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      console.error('选择图片失败:', error);
+      Alert.alert('错误', '选择图片失败，请重试');
+    }
+  };
+
+  // 图片上传到存储服务的函数
+  const uploadImageToStorage = async (uri: string, chatId: string): Promise<string> => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      // 上传到Firebase Storage并获取路径
+      return await FirebaseStorageService.uploadImage(
+        blob,
+        'chats',
+        chatId,
+        undefined,
+        (progress) => console.log(`上传进度: ${progress}%`)
+      );
+    } catch (error) {
+      console.error('上传图片到存储服务失败:', error);
+      throw error;
     }
   };
 
@@ -248,7 +221,14 @@ export default function ChatScreen() {
     setViewingImage(null);
   };
 
-  // Only show loading indicator when initially loading the chat, not when sending messages
+  const handleRetry = () => {
+    if (id) {
+      fetchChatById(id);
+      fetchMessages(id);
+    }
+  };
+
+  // 仅在初始加载时显示加载指示器
   if (isLoading && !chat) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -260,9 +240,12 @@ export default function ChatScreen() {
   if (error) {
     return (
       <SafeAreaView style={styles.errorContainer}>
-        <Text style={styles.errorText}>Error: {error}</Text>
+        <Text style={styles.errorText}>发生错误: {error}</Text>
+        <TouchableOpacity onPress={handleRetry} style={styles.retryButton}>
+          <Text style={styles.retryButtonText}>重试</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>Go Back</Text>
+          <Text style={styles.backButtonText}>返回</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -298,7 +281,7 @@ export default function ChatScreen() {
               <View style={styles.headerTitleText}>
                 <Text style={styles.headerName}>{otherUser?.displayName}</Text>
                 <Text style={styles.headerStatus}>
-                  {otherUser?.isOnline ? 'Online' : 'Offline'}
+                  {otherUser?.isOnline ? '在线' : '离线'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -315,6 +298,21 @@ export default function ChatScreen() {
           ),
         }}
       />
+
+      {/* 连接状态提示 */}
+      {connectionStatus === 'connecting' && (
+        <View style={styles.connectionStatusBar}>
+          <Loader size={14} color="white" />
+          <Text style={styles.connectionStatusText}>正在连接服务器...</Text>
+        </View>
+      )}
+
+      {connectionStatus === 'reconnecting' && (
+        <View style={styles.connectionStatusBar}>
+          <Loader size={14} color="white" />
+          <Text style={styles.connectionStatusText}>重新连接中...</Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
@@ -333,6 +331,17 @@ export default function ChatScreen() {
               avatar={item.senderId === user?.id ? user?.avatar : otherUser?.avatar}
               name={item.senderId === user?.id ? user?.displayName : otherUser?.displayName}
               onImagePress={handleImagePress}
+              status={item.status}
+              onResend={() => {
+                if (item.senderId === user?.id && item.status === 'failed') {
+                  sendMessage({
+                    content: item.content,
+                    chatId: chat.id,
+                    images: item.images,
+                    retryMessageId: item.id
+                  });
+                }
+              }}
             />
           )}
           contentContainerStyle={styles.messagesList}
@@ -341,58 +350,78 @@ export default function ChatScreen() {
               flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
-          // This ensures the list updates when messages change
+          // 确保列表在消息变化时更新
           extraData={chatMessages.length}
         />
 
+        {/* 选中的图片预览 */}
         {selectedImage && (
           <View style={styles.selectedImageContainer}>
             <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
-            <TouchableOpacity
-              style={styles.removeImageButton}
-              onPress={handleRemoveImage}
-            >
-              <X size={16} color="white" />
-            </TouchableOpacity>
+            {isUploading ? (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={styles.uploadingText}>上传中...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={handleRemoveImage}
+              >
+                <X size={16} color="white" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
+        {/* 输入框区域 */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Type a message..."
+            placeholder="输入消息..."
             placeholderTextColor={colors.textSecondary}
-            value={message}
-            onChangeText={setMessage}
+            value={messageText}
+            onChangeText={setMessageText}
             multiline
             maxLength={500}
-            onSubmitEditing={handleSend}
+            editable={!isSending && !isUploading && connectionStatus !== 'disconnected'}
           />
 
-          {message.trim() || selectedImage ? (
+          {messageText.trim() || selectedImage ? (
             <TouchableOpacity
-              style={styles.sendButton}
+              style={[
+                styles.sendButton,
+                (isSending || isUploading || connectionStatus === 'disconnected') && styles.disabledButton
+              ]}
               onPress={handleSend}
-              disabled={isSending}
+              disabled={isSending || isUploading || connectionStatus === 'disconnected'}
             >
               {isSending ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Send size={24} color={colors.primary} />
+                <Send size={24} color={(isUploading || connectionStatus === 'disconnected') ? colors.textLight : colors.primary} />
               )}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              style={styles.mediaButton}
+              style={[
+                styles.mediaButton,
+                (isUploading || connectionStatus === 'disconnected') && styles.disabledButton
+              ]}
               onPress={handleImageUpload}
+              disabled={isUploading || connectionStatus === 'disconnected'}
             >
-              <ImageIcon size={24} color={colors.textSecondary} />
+              {isUploading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <ImageIcon size={24} color={connectionStatus === 'disconnected' ? colors.textLight : colors.textSecondary} />
+              )}
             </TouchableOpacity>
           )}
         </View>
       </KeyboardAvoidingView>
 
-      {/* Image Viewer Modal */}
+      {/* 全屏图片查看器 */}
       {viewingImage && (
         <ImageViewer
           imageUrl={viewingImage}
@@ -428,15 +457,28 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
-  backButton: {
+  retryButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,
     backgroundColor: colors.primary,
     borderRadius: 8,
+    marginBottom: 16,
   },
-  backButtonText: {
+  retryButtonText: {
     color: 'white',
     fontWeight: '600',
+  },
+  backButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  backButtonText: {
+    color: colors.text,
+    fontWeight: '500',
   },
   headerButton: {
     padding: 8,
@@ -457,6 +499,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
+  connectionStatusBar: {
+    backgroundColor: colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  connectionStatusText: {
+    color: 'white',
+    fontSize: 12,
+    marginLeft: 8,
+  },
   keyboardAvoidingView: {
     flex: 1,
   },
@@ -470,13 +525,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
-    height: 200,  // 增加高度以显示更多内容
-    backgroundColor: '#f0f0f0', // 添加背景色以便于区分
+    height: 200,
+    backgroundColor: '#f0f0f0',
   },
   selectedImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'contain', // 改为contain模式以保持纵横比并完整显示图片
+    resizeMode: 'contain',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingText: {
+    color: 'white',
+    fontSize: 14,
+    marginTop: 8,
+    fontWeight: '500',
   },
   removeImageButton: {
     position: 'absolute',
@@ -515,5 +586,8 @@ const styles = StyleSheet.create({
   },
   mediaButton: {
     padding: 8,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });
