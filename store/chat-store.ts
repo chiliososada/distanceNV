@@ -214,19 +214,64 @@ export const useChatStore = create<ChatStore>()(
         }
       },
 
+      // fetchChatById: async (id: string) => {
+      //   set({ isLoading: true, error: null });
+      //   try {
+      //     // 调用API获取单个聊天详情
+      //     const response = await ApiService.get<ApiResponse<ChatDetailResponse>>(`/auth/chats/${id}`);
+
+      //     if (response.code !== 0) {
+      //       throw new Error(response.message || "获取聊天详情失败");
+      //     }
+
+      //     const chat = convertApiChatToChat(response.data.chat);
+
+      //     set({ currentChat: chat, isLoading: false });
+
+      //     // 确保WebSocket连接
+      //     if (!WebSocketService.isConnected()) {
+      //       await WebSocketService.connectAsync();
+      //     }
+
+      //     // 加入聊天室WebSocket
+      //     WebSocketService.joinChat(id);
+
+      //   } catch (error: any) {
+      //     console.error("获取聊天详情失败:", error);
+      //     set({ error: error.message || "获取聊天详情失败", isLoading: false });
+      //   }
+      // },
       fetchChatById: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // 调用API获取单个聊天详情
-          const response = await ApiService.get<ApiResponse<ChatDetailResponse>>(`/auth/chats/${id}`);
+          // 使用模拟数据，添加类型断言
+          const mockChat: Chat = {
+            id: id,
+            name: "测试聊天室",
+            isGroup: true,
+            participants: [
+              {
+                id: useAuthStore.getState().user?.id || "current-user",
+                type: 'person' as 'person', // 添加类型断言，确保类型是字面量类型而非string
+                email: 'test@example.com',
+                username: 'testuser',
+                displayName: '当前用户',
+                avatar: '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                followersCount: 0,
+                followingCount: 0,
+                topicsCount: 0,
+                likesCount: 0,         // 添加缺少的必要属性
+                lastActiveAt: new Date().toISOString() // 添加缺少的必要属性
+              }
+            ],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            unreadCount: 0
+          };
 
-          if (response.code !== 0) {
-            throw new Error(response.message || "获取聊天详情失败");
-          }
-
-          const chat = convertApiChatToChat(response.data.chat);
-
-          set({ currentChat: chat, isLoading: false });
+          set({ currentChat: mockChat, isLoading: false });
 
           // 确保WebSocket连接
           if (!WebSocketService.isConnected()) {
@@ -235,13 +280,11 @@ export const useChatStore = create<ChatStore>()(
 
           // 加入聊天室WebSocket
           WebSocketService.joinChat(id);
-
         } catch (error: any) {
           console.error("获取聊天详情失败:", error);
           set({ error: error.message || "获取聊天详情失败", isLoading: false });
         }
       },
-
       fetchMessages: async (chatId: string) => {
         set({ isLoading: true, error: null });
         try {
