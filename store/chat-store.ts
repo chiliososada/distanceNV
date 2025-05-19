@@ -5,876 +5,81 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Chat, CreateChatPayload, CreateMessagePayload, Message } from '@/types/chat';
 import { useAuthStore } from './auth-store';
 import { ChatMessage } from '@/services/websocket-service';
+import ApiService from '@/services/api-service';
+import WebSocketService from '@/services/websocket-service';
 
-// Mock chats for demo
-const mockChats: Chat[] = [
-  {
-    id: '1',
-    isGroup: false,
-    participants: [
-      {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      {
-        id: '2',
-        type: 'person',
-        email: 'jane@example.com',
-        username: 'janesmith',
-        displayName: 'Jane Smith',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        createdAt: new Date(2023, 2, 10).toISOString(),
-        updatedAt: new Date(2023, 6, 5).toISOString(),
-        followersCount: 532,
-        followingCount: 215,
-        topicsCount: 47,
-      },
-    ],
-    createdAt: new Date(2023, 6, 10).toISOString(),
-    updatedAt: new Date(2023, 6, 15).toISOString(),
-    unreadCount: 2,
-    isMuted: false,
-    lastMessage: {
-      id: '3',
-      content: "I'm doing well. Did you see that new coffee shop downtown?",
-      senderId: '1',
+// 类型转换函数 - 将API响应转换为应用内部类型
+const convertApiChatToChat = (apiChat: any): Chat => {
+  return {
+    id: apiChat.uid,
+    name: apiChat.name,
+    isGroup: apiChat.is_group,
+    participants: apiChat.participants.map((p: any) => ({
+      id: p.uid,
+      type: p.type || 'person',
+      email: p.email || '',
+      username: p.username || p.uid,
+      displayName: p.display_name || p.nickname || '未知用户',
+      avatar: p.avatar_url || p.photo_url,
+      createdAt: p.created_at || new Date().toISOString(),
+      updatedAt: p.updated_at || new Date().toISOString(),
+      followersCount: p.followers_count || 0,
+      followingCount: p.following_count || 0,
+      topicsCount: p.topics_count || 0,
+    })),
+    lastMessage: apiChat.last_message ? {
+      id: apiChat.last_message.uid,
+      content: apiChat.last_message.content,
+      senderId: apiChat.last_message.sender_id,
       sender: {
-        id: '1',
+        id: apiChat.last_message.sender_id,
         type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
+        email: '',
+        username: apiChat.last_message.sender_id,
+        displayName: apiChat.last_message.sender_name || '未知用户',
+        avatar: apiChat.last_message.sender_avatar,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        followersCount: 0,
+        followingCount: 0,
+        topicsCount: 0,
       },
-      chatId: '1',
-      createdAt: new Date(2023, 6, 15, 10, 35).toISOString(),
-      readBy: ['1'],
-    }
-  },
-  {
-    id: '2',
-    name: 'Hiking Enthusiasts',
-    isGroup: true,
-    participants: [
-      {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      {
-        id: '2',
-        type: 'person',
-        email: 'jane@example.com',
-        username: 'janesmith',
-        displayName: 'Jane Smith',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        createdAt: new Date(2023, 2, 10).toISOString(),
-        updatedAt: new Date(2023, 6, 5).toISOString(),
-        followersCount: 532,
-        followingCount: 215,
-        topicsCount: 47,
-      },
-      {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      }
-    ],
-    topicId: '2',
-    createdAt: new Date(2023, 6, 14).toISOString(),
-    updatedAt: new Date(2023, 6, 15).toISOString(),
-    unreadCount: 5,
-    isMuted: true,
-    lastMessage: {
-      id: '3',
-      content: "I was thinking about the Eagle Peak trail. It's supposed to be beautiful this time of year.",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '2',
-      createdAt: new Date(2023, 6, 14, 15, 10).toISOString(),
-      readBy: ['1'],
-      images: ['https://images.unsplash.com/photo-1551632811-561732d1e306'],
-    }
-  },
-  {
-    id: '3',
-    isGroup: false,
-    participants: [
-      {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      }
-    ],
-    createdAt: new Date(2023, 5, 20).toISOString(),
-    updatedAt: new Date(2023, 6, 12).toISOString(),
-    unreadCount: 1,
-    isMuted: false,
-    lastMessage: {
-      id: '2',
-      content: "Let's meet up for lunch next week. I have some exciting news to share!",
-      senderId: '3',
-      sender: {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      },
-      chatId: '3',
-      createdAt: new Date(2023, 6, 12, 13, 45).toISOString(),
-      readBy: ['3'],
-    }
-  },
-  {
-    id: '4',
-    isGroup: false,
-    participants: [
-      {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      {
-        id: '4',
-        type: 'business',
-        email: 'info@coffeeshop.com',
-        username: 'citycoffee',
-        displayName: 'City Coffee Shop',
-        avatar: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8',
-        createdAt: new Date(2023, 1, 10).toISOString(),
-        updatedAt: new Date(2023, 5, 15).toISOString(),
-        followersCount: 1245,
-        followingCount: 58,
-        topicsCount: 12,
-      }
-    ],
-    createdAt: new Date(2023, 4, 5).toISOString(),
-    updatedAt: new Date(2023, 6, 10).toISOString(),
-    unreadCount: 3,
-    isMuted: false,
-    lastMessage: {
-      id: '1',
-      content: "We're having a special promotion this weekend! 20% off all drinks.",
-      senderId: '4',
-      sender: {
-        id: '4',
-        type: 'business',
-        email: 'info@coffeeshop.com',
-        username: 'citycoffee',
-        displayName: 'City Coffee Shop',
-        avatar: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8',
-        createdAt: new Date(2023, 1, 10).toISOString(),
-        updatedAt: new Date(2023, 5, 15).toISOString(),
-        followersCount: 1245,
-        followingCount: 58,
-        topicsCount: 12,
-      },
-      chatId: '4',
-      createdAt: new Date(2023, 6, 10, 9, 0).toISOString(),
-      readBy: ['4'],
-      images: ['https://images.unsplash.com/photo-1509042239860-f550ce710b93'],
-    }
-  },
-  {
-    id: '5',
-    name: 'Travel Buddies',
-    isGroup: true,
-    participants: [
-      {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      {
-        id: '2',
-        type: 'person',
-        email: 'jane@example.com',
-        username: 'janesmith',
-        displayName: 'Jane Smith',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        createdAt: new Date(2023, 2, 10).toISOString(),
-        updatedAt: new Date(2023, 6, 5).toISOString(),
-        followersCount: 532,
-        followingCount: 215,
-        topicsCount: 47,
-      },
-      {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      },
-      {
-        id: '5',
-        type: 'person',
-        email: 'sarah@example.com',
-        username: 'sarahlee',
-        displayName: 'Sarah Lee',
-        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80',
-        createdAt: new Date(2023, 2, 20).toISOString(),
-        updatedAt: new Date(2023, 5, 25).toISOString(),
-        followersCount: 420,
-        followingCount: 310,
-        topicsCount: 15,
-      }
-    ],
-    topicId: '5',
-    createdAt: new Date(2023, 5, 1).toISOString(),
-    updatedAt: new Date(2023, 6, 8).toISOString(),
-    unreadCount: 12,
-    isMuted: false,
-    lastMessage: {
-      id: '4',
-      content: "Has anyone been to Bali recently? I'm planning a trip next month and need some recommendations.",
-      senderId: '5',
-      sender: {
-        id: '5',
-        type: 'person',
-        email: 'sarah@example.com',
-        username: 'sarahlee',
-        displayName: 'Sarah Lee',
-        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80',
-        createdAt: new Date(2023, 2, 20).toISOString(),
-        updatedAt: new Date(2023, 5, 25).toISOString(),
-        followersCount: 420,
-        followingCount: 310,
-        topicsCount: 15,
-      },
-      chatId: '5',
-      createdAt: new Date(2023, 6, 8, 18, 22).toISOString(),
-      readBy: ['5'],
-    }
-  },
-  {
-    id: '6',
-    isGroup: false,
-    participants: [
-      {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      {
-        id: '6',
-        type: 'business',
-        email: 'support@techstore.com',
-        username: 'techstore',
-        displayName: 'Tech Store',
-        avatar: 'https://images.unsplash.com/photo-1563770660941-10a63607957a',
-        createdAt: new Date(2023, 0, 5).toISOString(),
-        updatedAt: new Date(2023, 4, 10).toISOString(),
-        followersCount: 2450,
-        followingCount: 120,
-        topicsCount: 45,
-      }
-    ],
-    createdAt: new Date(2023, 3, 15).toISOString(),
-    updatedAt: new Date(2023, 6, 5).toISOString(),
-    unreadCount: 0,
-    isMuted: true,
-    lastMessage: {
-      id: '5',
-      content: "Your order #45678 has been shipped and will arrive in 2-3 business days.",
-      senderId: '6',
-      sender: {
-        id: '6',
-        type: 'business',
-        email: 'support@techstore.com',
-        username: 'techstore',
-        displayName: 'Tech Store',
-        avatar: 'https://images.unsplash.com/photo-1563770660941-10a63607957a',
-        createdAt: new Date(2023, 0, 5).toISOString(),
-        updatedAt: new Date(2023, 4, 10).toISOString(),
-        followersCount: 2450,
-        followingCount: 120,
-        topicsCount: 45,
-      },
-      chatId: '6',
-      createdAt: new Date(2023, 6, 5, 14, 30).toISOString(),
-      readBy: ['1', '6'],
-    }
-  }
-];
+      chatId: apiChat.uid,
+      createdAt: apiChat.last_message.created_at,
+      readBy: apiChat.last_message.read_by || [],
+      images: apiChat.last_message.images || [],
+    } : undefined,
+    createdAt: apiChat.created_at,
+    updatedAt: apiChat.updated_at,
+    unreadCount: apiChat.unread_count || 0,
+    isMuted: apiChat.is_muted || false,
+    topicId: apiChat.topic_id,
+  };
+};
 
-// Mock messages for demo
-const mockMessages: Record<string, Message[]> = {
-  '1': [
-    {
-      id: '1',
-      content: "Hey, how's it going?",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '1',
-      createdAt: new Date(2023, 6, 15, 10, 30).toISOString(),
-      readBy: ['1'],
+const convertApiMessageToMessage = (apiMessage: any): Message => {
+  return {
+    id: apiMessage.uid,
+    content: apiMessage.content,
+    senderId: apiMessage.sender_id,
+    sender: {
+      id: apiMessage.sender_id,
+      type: 'person',
+      email: '',
+      username: apiMessage.sender_id,
+      displayName: apiMessage.sender_name || '未知用户',
+      avatar: apiMessage.sender_avatar,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      followersCount: 0,
+      followingCount: 0,
+      topicsCount: 0,
     },
-    {
-      id: '2',
-      content: "I'm good, thanks! How about you?",
-      senderId: '2',
-      sender: {
-        id: '2',
-        type: 'person',
-        email: 'jane@example.com',
-        username: 'janesmith',
-        displayName: 'Jane Smith',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        createdAt: new Date(2023, 2, 10).toISOString(),
-        updatedAt: new Date(2023, 6, 5).toISOString(),
-        followersCount: 532,
-        followingCount: 215,
-        topicsCount: 47,
-      },
-      chatId: '1',
-      createdAt: new Date(2023, 6, 15, 10, 32).toISOString(),
-      readBy: ['2'],
-    },
-    {
-      id: '3',
-      content: "I'm doing well. Did you see that new coffee shop downtown?",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '1',
-      createdAt: new Date(2023, 6, 15, 10, 35).toISOString(),
-      readBy: ['1'],
-    },
-  ],
-  '2': [
-    {
-      id: '1',
-      content: "Hey everyone! Who's up for a hike this weekend?",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '2',
-      createdAt: new Date(2023, 6, 14, 15, 0).toISOString(),
-      readBy: ['1', '2'],
-    },
-    {
-      id: '2',
-      content: "I'm in! What trail are you thinking?",
-      senderId: '2',
-      sender: {
-        id: '2',
-        type: 'person',
-        email: 'jane@example.com',
-        username: 'janesmith',
-        displayName: 'Jane Smith',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        createdAt: new Date(2023, 2, 10).toISOString(),
-        updatedAt: new Date(2023, 6, 5).toISOString(),
-        followersCount: 532,
-        followingCount: 215,
-        topicsCount: 47,
-      },
-      chatId: '2',
-      createdAt: new Date(2023, 6, 14, 15, 5).toISOString(),
-      readBy: ['1', '2'],
-    },
-    {
-      id: '3',
-      content: "I was thinking about the Eagle Peak trail. It's supposed to be beautiful this time of year.",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '2',
-      createdAt: new Date(2023, 6, 14, 15, 10).toISOString(),
-      readBy: ['1'],
-      images: ['https://images.unsplash.com/photo-1551632811-561732d1e306'],
-    },
-    {
-      id: '4',
-      content: "Sounds great! I've been wanting to try that trail. What time were you thinking?",
-      senderId: '3',
-      sender: {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      },
-      chatId: '2',
-      createdAt: new Date(2023, 6, 14, 15, 15).toISOString(),
-      readBy: ['3'],
-    },
-    {
-      id: '5',
-      content: "How about 9 AM on Saturday? We could meet at the trailhead.",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '2',
-      createdAt: new Date(2023, 6, 14, 15, 20).toISOString(),
-      readBy: ['1'],
-    }
-  ],
-  '3': [
-    {
-      id: '1',
-      content: "Hey Mike, how have you been?",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '3',
-      createdAt: new Date(2023, 6, 12, 13, 30).toISOString(),
-      readBy: ['1'],
-    },
-    {
-      id: '2',
-      content: "Let's meet up for lunch next week. I have some exciting news to share!",
-      senderId: '3',
-      sender: {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      },
-      chatId: '3',
-      createdAt: new Date(2023, 6, 12, 13, 45).toISOString(),
-      readBy: ['3'],
-    }
-  ],
-  '4': [
-    {
-      id: '1',
-      content: "We're having a special promotion this weekend! 20% off all drinks.",
-      senderId: '4',
-      sender: {
-        id: '4',
-        type: 'business',
-        email: 'info@coffeeshop.com',
-        username: 'citycoffee',
-        displayName: 'City Coffee Shop',
-        avatar: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8',
-        createdAt: new Date(2023, 1, 10).toISOString(),
-        updatedAt: new Date(2023, 5, 15).toISOString(),
-        followersCount: 1245,
-        followingCount: 58,
-        topicsCount: 12,
-      },
-      chatId: '4',
-      createdAt: new Date(2023, 6, 10, 9, 0).toISOString(),
-      readBy: ['4'],
-      images: ['https://images.unsplash.com/photo-1509042239860-f550ce710b93'],
-    },
-    {
-      id: '2',
-      content: "That sounds great! What hours are you open this weekend?",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '4',
-      createdAt: new Date(2023, 6, 10, 10, 15).toISOString(),
-      readBy: ['1'],
-    },
-    {
-      id: '3',
-      content: "We're open from 7 AM to 9 PM on Saturday and 8 AM to 7 PM on Sunday. Hope to see you there!",
-      senderId: '4',
-      sender: {
-        id: '4',
-        type: 'business',
-        email: 'info@coffeeshop.com',
-        username: 'citycoffee',
-        displayName: 'City Coffee Shop',
-        avatar: 'https://images.unsplash.com/photo-1559925393-8be0ec4767c8',
-        createdAt: new Date(2023, 1, 10).toISOString(),
-        updatedAt: new Date(2023, 5, 15).toISOString(),
-        followersCount: 1245,
-        followingCount: 58,
-        topicsCount: 12,
-      },
-      chatId: '4',
-      createdAt: new Date(2023, 6, 10, 11, 0).toISOString(),
-      readBy: ['4'],
-    }
-  ],
-  '5': [
-    {
-      id: '1',
-      content: "Hi everyone! I created this group for us to plan our upcoming trips together.",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '5',
-      createdAt: new Date(2023, 5, 1, 12, 0).toISOString(),
-      readBy: ['1', '2', '3'],
-    },
-    {
-      id: '2',
-      content: "Great idea! I've been wanting to plan a trip to Europe this summer.",
-      senderId: '2',
-      sender: {
-        id: '2',
-        type: 'person',
-        email: 'jane@example.com',
-        username: 'janesmith',
-        displayName: 'Jane Smith',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-        createdAt: new Date(2023, 2, 10).toISOString(),
-        updatedAt: new Date(2023, 6, 5).toISOString(),
-        followersCount: 532,
-        followingCount: 215,
-        topicsCount: 47,
-      },
-      chatId: '5',
-      createdAt: new Date(2023, 5, 1, 12, 15).toISOString(),
-      readBy: ['1', '2', '3'],
-    },
-    {
-      id: '3',
-      content: "I'm thinking about Japan in the fall. Anyone interested?",
-      senderId: '3',
-      sender: {
-        id: '3',
-        type: 'person',
-        email: 'mike@example.com',
-        username: 'mikeross',
-        displayName: 'Mike Ross',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d',
-        createdAt: new Date(2023, 3, 5).toISOString(),
-        updatedAt: new Date(2023, 6, 10).toISOString(),
-        followersCount: 320,
-        followingCount: 250,
-        topicsCount: 28,
-      },
-      chatId: '5',
-      createdAt: new Date(2023, 5, 1, 13, 0).toISOString(),
-      readBy: ['1', '2', '3'],
-    },
-    {
-      id: '4',
-      content: "Has anyone been to Bali recently? I'm planning a trip next month and need some recommendations.",
-      senderId: '5',
-      sender: {
-        id: '5',
-        type: 'person',
-        email: 'sarah@example.com',
-        username: 'sarahlee',
-        displayName: 'Sarah Lee',
-        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80',
-        createdAt: new Date(2023, 2, 20).toISOString(),
-        updatedAt: new Date(2023, 5, 25).toISOString(),
-        followersCount: 420,
-        followingCount: 310,
-        topicsCount: 15,
-      },
-      chatId: '5',
-      createdAt: new Date(2023, 6, 8, 18, 22).toISOString(),
-      readBy: ['5'],
-    }
-  ],
-  '6': [
-    {
-      id: '1',
-      content: "Thank you for your recent purchase! Your order #45678 has been confirmed.",
-      senderId: '6',
-      sender: {
-        id: '6',
-        type: 'business',
-        email: 'support@techstore.com',
-        username: 'techstore',
-        displayName: 'Tech Store',
-        avatar: 'https://images.unsplash.com/photo-1563770660941-10a63607957a',
-        createdAt: new Date(2023, 0, 5).toISOString(),
-        updatedAt: new Date(2023, 4, 10).toISOString(),
-        followersCount: 2450,
-        followingCount: 120,
-        topicsCount: 45,
-      },
-      chatId: '6',
-      createdAt: new Date(2023, 6, 1, 10, 0).toISOString(),
-      readBy: ['1', '6'],
-    },
-    {
-      id: '2',
-      content: "When can I expect my order to be shipped?",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '6',
-      createdAt: new Date(2023, 6, 2, 9, 30).toISOString(),
-      readBy: ['1', '6'],
-    },
-    {
-      id: '3',
-      content: "We're processing your order and it should be shipped within 1-2 business days. We'll send you a notification once it's on the way.",
-      senderId: '6',
-      sender: {
-        id: '6',
-        type: 'business',
-        email: 'support@techstore.com',
-        username: 'techstore',
-        displayName: 'Tech Store',
-        avatar: 'https://images.unsplash.com/photo-1563770660941-10a63607957a',
-        createdAt: new Date(2023, 0, 5).toISOString(),
-        updatedAt: new Date(2023, 4, 10).toISOString(),
-        followersCount: 2450,
-        followingCount: 120,
-        topicsCount: 45,
-      },
-      chatId: '6',
-      createdAt: new Date(2023, 6, 2, 11, 15).toISOString(),
-      readBy: ['1', '6'],
-    },
-    {
-      id: '4',
-      content: "Thanks for the update!",
-      senderId: '1',
-      sender: {
-        id: '1',
-        type: 'person',
-        email: 'john@example.com',
-        username: 'johndoe',
-        displayName: 'John Doe',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36',
-        createdAt: new Date(2023, 1, 15).toISOString(),
-        updatedAt: new Date(2023, 5, 20).toISOString(),
-        followersCount: 245,
-        followingCount: 178,
-        topicsCount: 32,
-      },
-      chatId: '6',
-      createdAt: new Date(2023, 6, 2, 11, 30).toISOString(),
-      readBy: ['1', '6'],
-    },
-    {
-      id: '5',
-      content: "Your order #45678 has been shipped and will arrive in 2-3 business days.",
-      senderId: '6',
-      sender: {
-        id: '6',
-        type: 'business',
-        email: 'support@techstore.com',
-        username: 'techstore',
-        displayName: 'Tech Store',
-        avatar: 'https://images.unsplash.com/photo-1563770660941-10a63607957a',
-        createdAt: new Date(2023, 0, 5).toISOString(),
-        updatedAt: new Date(2023, 4, 10).toISOString(),
-        followersCount: 2450,
-        followingCount: 120,
-        topicsCount: 45,
-      },
-      chatId: '6',
-      createdAt: new Date(2023, 6, 5, 14, 30).toISOString(),
-      readBy: ['1', '6'],
-    }
-  ]
+    chatId: apiMessage.chat_id,
+    createdAt: apiMessage.created_at,
+    readBy: apiMessage.read_by || [],
+    images: apiMessage.images || [],
+  };
 };
 
 interface ChatState {
@@ -901,61 +106,83 @@ export interface ChatStore extends ChatState {
 export const useChatStore = create<ChatStore>()(
   persist(
     (set, get) => ({
-      chats: mockChats,
+      chats: [],
       currentChat: null,
-      messages: mockMessages,
+      messages: {},
       isLoading: false,
       error: null,
 
       fetchChats: async () => {
         set({ isLoading: true, error: null });
         try {
-          // 模拟API调用
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // 调用API获取聊天列表
+          const response = await ApiService.get('/auth/chats');
 
-          // 在实际应用中，我们会从API获取
-          set({ chats: mockChats, isLoading: false });
-        } catch (error) {
+          // 检查响应是否成功
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取聊天列表失败");
+          }
+
+          // 转换API数据格式
+          const chats = response.data.chats.map(convertApiChatToChat);
+
+          set({ chats, isLoading: false });
+
+          // 加入所有聊天室的WebSocket
+          const chatIds = chats.map(chat => chat.id);
+          WebSocketService.joinChats(chatIds);
+
+        } catch (error: any) {
           console.error("获取聊天列表失败:", error);
-          set({ error: "获取聊天列表失败", isLoading: false });
+          set({ error: error.message || "获取聊天列表失败", isLoading: false });
         }
       },
 
       fetchChatById: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // 模拟API调用
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // 调用API获取单个聊天详情
+          const response = await ApiService.get(`/auth/chats/${id}`);
 
-          const chat = mockChats.find(c => c.id === id);
-
-          if (chat) {
-            set({ currentChat: chat, isLoading: false });
-          } else {
-            console.error("未找到聊天:", id);
-            set({ error: "未找到聊天", isLoading: false });
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取聊天详情失败");
           }
-        } catch (error) {
+
+          const chat = convertApiChatToChat(response.data.chat);
+
+          set({ currentChat: chat, isLoading: false });
+
+          // 加入聊天室WebSocket
+          WebSocketService.joinChat(id);
+
+        } catch (error: any) {
           console.error("获取聊天详情失败:", error);
-          set({ error: "获取聊天详情失败", isLoading: false });
+          set({ error: error.message || "获取聊天详情失败", isLoading: false });
         }
       },
 
       fetchMessages: async (chatId: string) => {
         set({ isLoading: true, error: null });
         try {
-          // 模拟API调用，但延迟较短
-          await new Promise(resolve => setTimeout(resolve, 300));
+          // 调用API获取消息历史
+          const response = await ApiService.get(`/auth/chats/${chatId}/messages`);
 
-          const chatMessages = mockMessages[chatId] || [];
+          if (response.code !== 0) {
+            throw new Error(response.message || "获取消息失败");
+          }
 
+          // 转换API消息格式
+          const messages = response.data.messages.map(convertApiMessageToMessage);
+
+          // 更新消息
           const updatedMessages = { ...get().messages };
-          updatedMessages[chatId] = chatMessages;
+          updatedMessages[chatId] = messages;
 
           set({ messages: updatedMessages, isLoading: false });
-        } catch (error) {
+
+        } catch (error: any) {
           console.error("获取消息失败:", error);
-          set({ error: "获取消息失败", isLoading: false });
+          set({ error: error.message || "获取消息失败", isLoading: false });
         }
       },
 
@@ -964,16 +191,16 @@ export const useChatStore = create<ChatStore>()(
           const user = useAuthStore.getState().user;
 
           if (!user) {
-            console.error("未认证");
             throw new Error("未认证");
           }
 
           const chatId = messageData.chatId;
+          const content = messageData.content || "";
 
-          // 创建新消息
+          // 1. 乐观更新UI - 先在本地添加消息
           const newMessage: Message = {
-            id: String(Date.now()),
-            content: messageData.content || "",
+            id: `temp-${Date.now()}`, // 临时ID，后端返回后会更新
+            content: content,
             senderId: user.id,
             sender: user,
             chatId,
@@ -982,15 +209,13 @@ export const useChatStore = create<ChatStore>()(
             images: messageData.images,
           };
 
-          // 获取当前状态
+          // 更新本地状态
           const currentMessages = { ...get().messages };
-          const currentChats = [...get().chats];
-
-          // 更新状态中的消息
           const chatMessages = currentMessages[chatId] || [];
           currentMessages[chatId] = [...chatMessages, newMessage];
 
-          // 更新聊天的最后一条消息和更新时间
+          // 更新聊天的最后一条消息和未读数
+          const currentChats = [...get().chats];
           const chatIndex = currentChats.findIndex(c => c.id === chatId);
 
           if (chatIndex !== -1) {
@@ -1001,35 +226,40 @@ export const useChatStore = create<ChatStore>()(
             };
           }
 
-          // 立即更新状态而不延迟
           set({
             messages: currentMessages,
-            chats: currentChats,
-            isLoading: false
+            chats: currentChats
           });
 
-          return Promise.resolve();
-        } catch (error) {
+          // 2. 通过WebSocket发送消息
+          WebSocketService.sendMessage(content, chatId);
+
+          // 3. 如果有图片，还需要上传图片
+          if (messageData.images && messageData.images.length > 0) {
+            // 在实际应用中，这里应该有上传图片的逻辑
+            // 上传完成后，可能需要再发送一条带图片的消息或更新当前消息
+
+            // 示例：上传图片后发送消息
+            // await ApiService.post(`/auth/chats/${chatId}/upload-images`, { images: messageData.images });
+            // WebSocketService.sendMessage("📷 图片", chatId);
+          }
+
+        } catch (error: any) {
           console.error("发送消息失败:", error);
-          return Promise.reject(error);
+          // 可以考虑更新UI状态，显示发送失败
         }
       },
 
       createChat: async (chatData: CreateChatPayload): Promise<string> => {
         set({ isLoading: true, error: null });
         try {
-          // 模拟API调用
-          await new Promise(resolve => setTimeout(resolve, 1000));
-
           const user = useAuthStore.getState().user;
 
           if (!user) {
-            console.error("未认证");
-            set({ error: "未认证", isLoading: false });
             throw new Error("未认证");
           }
 
-          // 检查聊天是否已存在（针对私聊）
+          // 检查是否是一对一聊天且聊天已存在
           if (!chatData.isGroup && chatData.participants.length === 1) {
             const otherUserId = chatData.participants[0];
             const existingChat = get().chats.find(
@@ -1042,44 +272,39 @@ export const useChatStore = create<ChatStore>()(
             }
           }
 
-          // 创建新的聊天
-          const newChat: Chat = {
-            id: String(Date.now()),
+          // 准备API请求数据
+          const apiChatData = {
+            participants: chatData.participants,
+            is_group: chatData.isGroup,
             name: chatData.name,
-            isGroup: chatData.isGroup,
-            participants: [
-              user,
-              ...mockChats[0].participants.filter(p =>
-                chatData.participants.includes(p.id) && p.id !== user.id
-              ),
-            ],
-            topicId: chatData.topicId,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            unreadCount: 0,
-            isMuted: false,
+            topic_id: chatData.topicId
           };
 
-          const updatedChats = [newChat, ...get().chats];
+          // 调用API创建聊天
+          const response = await ApiService.post('/auth/chats', apiChatData);
 
-          // 为此聊天初始化空消息列表
-          const updatedMessages = { ...get().messages };
-          updatedMessages[newChat.id] = [];
+          if (response.code !== 0) {
+            throw new Error(response.message || "创建聊天失败");
+          }
 
-          set({
-            chats: updatedChats,
-            messages: updatedMessages,
-            currentChat: newChat,
-            isLoading: false
-          });
+          const newChatId = response.data.chat_id;
 
-          return newChat.id;
-        } catch (error) {
+          // 重新获取聊天列表，包含新创建的聊天
+          await get().fetchChats();
+
+          // 获取新创建的聊天详情
+          await get().fetchChatById(newChatId);
+
+          // 加入WebSocket聊天室
+          WebSocketService.joinChat(newChatId);
+
+          set({ isLoading: false });
+
+          return newChatId;
+
+        } catch (error: any) {
           console.error("创建聊天失败:", error);
-          set({
-            error: "创建聊天失败",
-            isLoading: false
-          });
+          set({ error: error.message || "创建聊天失败", isLoading: false });
           throw error;
         }
       },
@@ -1093,25 +318,22 @@ export const useChatStore = create<ChatStore>()(
             return;
           }
 
-          // 获取当前状态
-          const currentChats = [...get().chats];
-          const currentMessages = { ...get().messages };
+          // 调用API标记为已读
+          await ApiService.post(`/auth/chats/${chatId}/read`, {});
 
-          // 查找聊天
+          // 更新本地状态
+          const currentChats = [...get().chats];
           const chatIndex = currentChats.findIndex(c => c.id === chatId);
 
-          if (chatIndex === -1) {
-            console.error("聊天未找到:", chatId);
-            return;
+          if (chatIndex !== -1) {
+            currentChats[chatIndex] = {
+              ...currentChats[chatIndex],
+              unreadCount: 0,
+            };
           }
 
-          // 更新聊天未读计数
-          currentChats[chatIndex] = {
-            ...currentChats[chatIndex],
-            unreadCount: 0,
-          };
-
-          // 将所有消息标记为当前用户已读
+          // 更新消息的已读状态
+          const currentMessages = { ...get().messages };
           if (currentMessages[chatId]) {
             currentMessages[chatId] = currentMessages[chatId].map(message => {
               if (!message.readBy.includes(user.id)) {
@@ -1124,59 +346,61 @@ export const useChatStore = create<ChatStore>()(
             });
           }
 
-          // 更新状态
           set({
             chats: currentChats,
             messages: currentMessages,
           });
 
-          return Promise.resolve();
-        } catch (error) {
-          console.error("标记聊天为已读失败:", error);
-          return Promise.reject(error);
+        } catch (error: any) {
+          console.error("标记为已读失败:", error);
         }
       },
 
       updateChatSettings: async (chatId: string, settings: Partial<Chat>) => {
         try {
-          // 获取当前状态
-          const currentChats = [...get().chats];
+          // 准备API请求数据
+          const apiSettings: any = {};
 
-          // 查找聊天
-          const chatIndex = currentChats.findIndex(c => c.id === chatId);
+          if (settings.name !== undefined) apiSettings.name = settings.name;
+          if (settings.isMuted !== undefined) apiSettings.is_muted = settings.isMuted;
 
-          if (chatIndex === -1) {
-            console.error("聊天未找到:", chatId);
-            return Promise.reject(new Error("聊天未找到"));
+          // 调用API更新聊天设置
+          const response = await ApiService.put(`/auth/chats/${chatId}/settings`, apiSettings);
+
+          if (response.code !== 0) {
+            throw new Error(response.message || "更新聊天设置失败");
           }
 
-          // 更新聊天设置
-          currentChats[chatIndex] = {
-            ...currentChats[chatIndex],
-            ...settings,
-            updatedAt: new Date().toISOString(),
-          };
+          // 更新本地状态
+          const currentChats = [...get().chats];
+          const chatIndex = currentChats.findIndex(c => c.id === chatId);
 
-          // 更新状态
+          if (chatIndex !== -1) {
+            currentChats[chatIndex] = {
+              ...currentChats[chatIndex],
+              ...settings,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+
           set({ chats: currentChats });
 
-          return Promise.resolve();
-        } catch (error) {
+        } catch (error: any) {
           console.error("更新聊天设置失败:", error);
-          return Promise.reject(error);
+          throw error;
         }
       },
 
       // WebSocket相关方法
       addWebSocketMessage: (message: ChatMessage) => {
-        const { messages, chats } = get();
-        const chatId = message.chat_id;
-
         // 确保消息对象格式正确
         if (!message.message_id || !message.chat_id) {
           console.error('消息缺少必要字段', message);
           return;
         }
+
+        const { messages, chats } = get();
+        const chatId = message.chat_id;
 
         // 转换WebSocket消息为应用消息格式
         const appMessage: Message = {
@@ -1195,8 +419,6 @@ export const useChatStore = create<ChatStore>()(
             followersCount: 0,
             followingCount: 0,
             topicsCount: 0,
-            likesCount: 0,
-            lastActiveAt: new Date().toISOString(),
           },
           chatId: message.chat_id,
           createdAt: message.at,
@@ -1230,9 +452,10 @@ export const useChatStore = create<ChatStore>()(
               : updatedChats[chatIndex].unreadCount + 1
           };
         } else {
-          // 这个聊天不在列表中，可能需要获取聊天信息
+          // 聊天不在列表中，可能需要获取聊天信息
           console.log('收到未知聊天室的消息:', chatId);
-          // 如果需要，可以在这里发起请求获取聊天信息
+          // 可选：获取新聊天信息
+          get().fetchChatById(chatId).catch(console.error);
         }
 
         // 更新状态
@@ -1243,19 +466,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       joinChatRooms: (chatIds: string[]) => {
-        // 此方法可用于在WebSocket服务中加入多个聊天室
-        import('@/services/websocket-service')
-          .then(module => {
-            const WebSocketService = module.default;
-            if (WebSocketService.isConnected()) {
-              WebSocketService.joinChats(chatIds);
-            } else {
-              console.error('WebSocket未连接，无法加入聊天室');
-            }
-          })
-          .catch(error => {
-            console.error('导入WebSocket服务失败:', error);
-          });
+        WebSocketService.joinChats(chatIds);
       }
     }),
     {

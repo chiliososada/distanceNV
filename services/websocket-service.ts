@@ -1,5 +1,4 @@
-// services/websocket-service.ts 修改版
-
+// services/websocket-service.ts
 import { nanoid } from 'nanoid';
 import { useChatStore } from '@/store/chat-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -45,7 +44,10 @@ class WebSocketService {
     private reconnectDelay = 3000; // 3秒
     private connectingPromise: Promise<boolean> | null = null;
     private pendingMessages: Array<{ chatId: string, message: string }> = [];
+    private pendingChats: Set<string> = new Set();
     private connectionState: 'closed' | 'connecting' | 'open' | 'closing' = 'closed';
+    private heartbeatInterval: number | null = null;
+    private lastPingTime = 0;
 
     public static getInstance(): WebSocketService {
         if (!WebSocketService.instance) {
@@ -71,18 +73,19 @@ class WebSocketService {
 
     // 连接WebSocket并返回Promise
     public async connectAsync(): Promise<boolean> {
-        if (this.connectingPromise) {
+        if (this.connectionState === 'open' && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            console.log('WebSocket已连接');
+            return true;
+        }
+
+        if (this.connectionState === 'connecting' && this.connectingPromise) {
+            console.log('WebSocket正在连接中...');
             return this.connectingPromise;
         }
 
         if (!this.session) {
             console.error('尝试在没有会话的情况下连接WebSocket');
             return Promise.resolve(false);
-        }
-
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            console.log('WebSocket已连接');
-            return Promise.resolve(true);
         }
 
         this.connectionState = 'connecting';
@@ -93,14 +96,7 @@ class WebSocketService {
                 const session = this.session;
 
                 // 关闭现有连接
-                if (this.ws) {
-                    this.ws.onclose = null; // 移除旧事件处理器
-                    this.ws.onerror = null;
-                    this.ws.onmessage = null;
-                    this.ws.onopen = null;
-                    this.ws.close();
-                    this.ws = null;
-                }
+                this.closeConnection();
 
                 // 创建新连接
                 this.ws = new WebSocket(session!.chat_url);
@@ -111,7 +107,6 @@ class WebSocketService {
 
                     // 发送验证消息
                     if (this.ws && this.session) {
-                        console.log(this.session.chat_token);
                         try {
                             this.ws.send(JSON.stringify({
                                 "type": "Validate",
@@ -121,10 +116,15 @@ class WebSocketService {
 
                             // 重置重连尝试
                             this.reconnectAttempts = 0;
+
+                            // 开始心跳检测
+                            this.startHeartbeat();
+
                             resolve(true);
 
-                            // 处理等待的消息
+                            // 处理等待的消息和聊天室
                             this.processPendingMessages();
+                            this.processPendingChats();
                         } catch (sendError) {
                             console.error('发送验证消息失败:', sendError);
                             resolve(false);
@@ -137,11 +137,21 @@ class WebSocketService {
                 this.ws.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+
+                        // 处理心跳响应
+                        if (data.type === 'Pong') {
+                            this.handlePong();
+                            return;
+                        }
+
                         console.log('收到WebSocket消息:', data);
 
-                        const message = parseChatMessage(data);
-                        const chatStore = useChatStore.getState();
-                        chatStore.addWebSocketMessage(message);
+                        // 处理聊天消息
+                        if (data.type === 'Chat') {
+                            const message = parseChatMessage(data);
+                            const chatStore = useChatStore.getState();
+                            chatStore.addWebSocketMessage(message);
+                        }
                     } catch (error) {
                         console.error('处理WebSocket消息出错:', error);
                     }
@@ -157,6 +167,7 @@ class WebSocketService {
                 this.ws.onclose = (event) => {
                     console.log(`WebSocket连接关闭: ${event.code} ${event.reason}`);
                     this.connectionState = 'closed';
+                    this.stopHeartbeat();
 
                     if (this.connectingPromise) {
                         resolve(false);
@@ -177,6 +188,70 @@ class WebSocketService {
         return this.connectingPromise;
     }
 
+    // 关闭现有连接
+    private closeConnection(): void {
+        if (this.ws) {
+            this.ws.onclose = null; // 移除旧事件处理器
+            this.ws.onerror = null;
+            this.ws.onmessage = null;
+            this.ws.onopen = null;
+
+            try {
+                if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                    this.ws.close();
+                }
+            } catch (error) {
+                console.error('关闭WebSocket连接出错:', error);
+            }
+
+            this.ws = null;
+        }
+    }
+
+    // 启动心跳检测
+    private startHeartbeat(): void {
+        this.stopHeartbeat();
+
+        this.lastPingTime = Date.now();
+
+        this.heartbeatInterval = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                try {
+                    this.ws.send(JSON.stringify({
+                        "type": "Ping",
+                        "timestamp": Date.now().toString()
+                    }));
+                    this.lastPingTime = Date.now();
+                } catch (error) {
+                    console.error('发送心跳包失败:', error);
+
+                    // 如果发送失败且超过30秒无响应，尝试重连
+                    if (Date.now() - this.lastPingTime > 30000) {
+                        console.log('WebSocket心跳检测超时，尝试重连');
+                        this.reconnect();
+                    }
+                }
+            } else {
+                // 连接不可用，尝试重连
+                this.reconnect();
+            }
+        }, 15000) as unknown as number; // 每15秒发送一次心跳包
+    }
+
+    // 停止心跳检测
+    private stopHeartbeat(): void {
+        if (this.heartbeatInterval !== null) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
+    }
+
+    // 处理心跳响应
+    private handlePong(): void {
+        // 更新最后响应时间
+        this.lastPingTime = Date.now();
+    }
+
     // 兼容旧API的connect方法
     public connect(chatIds?: string[]): void {
         this.connectAsync().then(success => {
@@ -184,6 +259,13 @@ class WebSocketService {
                 this.joinChats(chatIds);
             }
         });
+    }
+
+    // 手动重连
+    public reconnect(): void {
+        this.closeConnection();
+        this.connectionState = 'closed';
+        this.connectAsync();
     }
 
     // 处理待发送的消息队列
@@ -194,15 +276,43 @@ class WebSocketService {
 
             console.log(`处理${this.pendingMessages.length}条待发送消息`);
 
-            this.pendingMessages.forEach(item => {
+            // 创建临时副本，避免在迭代过程中修改原数组
+            const messagesToSend = [...this.pendingMessages];
+            this.pendingMessages = [];
+
+            messagesToSend.forEach(item => {
                 try {
                     this.sendMessage(item.message, item.chatId);
                 } catch (e) {
                     console.error('发送待处理消息失败:', e);
+                    // 失败时，重新添加到待处理队列
+                    this.pendingMessages.push(item);
                 }
             });
+        }
+    }
 
-            this.pendingMessages = [];
+    // 处理待加入的聊天室
+    private processPendingChats(): void {
+        if (this.pendingChats.size > 0 &&
+            this.ws &&
+            this.ws.readyState === WebSocket.OPEN) {
+
+            console.log(`处理${this.pendingChats.size}个待加入聊天室`);
+
+            const chatIds = Array.from(this.pendingChats);
+            this.pendingChats.clear();
+
+            try {
+                this.ws.send(JSON.stringify({
+                    "type": "Join",
+                    "chat_id": chatIds
+                }));
+            } catch (error) {
+                console.error('加入聊天室失败:', error);
+                // 失败时，重新添加到待处理集合
+                chatIds.forEach(id => this.pendingChats.add(id));
+            }
         }
     }
 
@@ -219,7 +329,7 @@ class WebSocketService {
         }
 
         this.reconnectAttempts++;
-        const delay = this.reconnectDelay * this.reconnectAttempts;
+        const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5); // 最大延迟15秒
 
         console.log(`将在 ${delay}ms 后尝试重新连接 (尝试 ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
@@ -237,6 +347,18 @@ class WebSocketService {
                 return await this.connectAsync();
             } else {
                 console.error('无法重连：缺少会话信息');
+
+                // 尝试从AsyncStorage恢复会话
+                try {
+                    const storedSession = await AsyncStorage.getItem('websocket-session');
+                    if (storedSession) {
+                        this.session = JSON.parse(storedSession);
+                        return await this.connectAsync();
+                    }
+                } catch (error) {
+                    console.error('恢复会话失败:', error);
+                }
+
                 return false;
             }
         }
@@ -269,8 +391,7 @@ class WebSocketService {
             console.error('发送消息失败:', error);
             // 如果发送失败，可能是连接状态问题，添加到待发送队列
             this.pendingMessages.push({ message, chatId });
-            this.connectionState = 'closed'; // 强制认为连接已关闭
-            this.checkAndReconnect();
+            this.reconnect();
         }
     }
 
@@ -281,8 +402,24 @@ class WebSocketService {
 
     // 加入多个聊天室
     public async joinChats(chatIds: string[]): Promise<boolean> {
+        if (!chatIds || chatIds.length === 0) {
+            return true;
+        }
+
+        // 过滤掉无效的聊天ID
+        const validChatIds = chatIds.filter(id => id && typeof id === 'string');
+
+        if (validChatIds.length === 0) {
+            return true;
+        }
+
         // 确保WebSocket连接
         if (this.connectionState !== 'open' || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.log('WebSocket未连接，将聊天室加入待处理列表');
+
+            // 添加到待加入集合
+            validChatIds.forEach(id => this.pendingChats.add(id));
+
             try {
                 const connected = await this.connectAsync();
                 if (!connected) {
@@ -295,18 +432,21 @@ class WebSocketService {
             }
         }
 
-        console.log('加入聊天室:', chatIds);
+        console.log('加入聊天室:', validChatIds);
 
         try {
             this.ws!.send(JSON.stringify({
                 "type": "Join",
-                "chat_id": chatIds
+                "chat_id": validChatIds
             }));
             return true;
         } catch (error) {
             console.error('加入聊天室失败:', error);
-            this.connectionState = 'closed'; // 强制认为连接已关闭
-            this.checkAndReconnect();
+
+            // 添加到待加入集合
+            validChatIds.forEach(id => this.pendingChats.add(id));
+
+            this.reconnect();
             return false;
         }
     }
@@ -314,6 +454,8 @@ class WebSocketService {
     // 断开连接
     public disconnect(): void {
         console.log('断开WebSocket连接');
+
+        this.stopHeartbeat();
 
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);
@@ -331,7 +473,6 @@ class WebSocketService {
         }
 
         this.connectionState = 'closed';
-        this.pendingMessages = [];
     }
 
     // 检查是否已连接
