@@ -9,6 +9,30 @@ import ApiService from '@/services/api-service';
 import WebSocketService from '@/services/websocket-service';
 import EventEmitter from '@/utils/event-emitter';
 import FirebaseStorageService from '@/services/firebase-storage-service';
+import { User, UserProfile } from '@/types/user';
+
+// API响应接口定义
+interface ApiResponse<T> {
+  code: number;
+  message?: string;
+  data: T;
+}
+
+interface ChatListResponse {
+  chats: any[];
+}
+
+interface ChatDetailResponse {
+  chat: any;
+}
+
+interface ChatMessagesResponse {
+  messages: any[];
+}
+
+interface ChatCreateResponse {
+  chat_id: string;
+}
 
 // 类型转换函数 - 将API响应转换为应用内部类型
 const convertApiChatToChat = (apiChat: any): Chat => {
@@ -82,7 +106,7 @@ const convertApiMessageToMessage = (apiMessage: any): Message => {
     createdAt: apiMessage.created_at,
     readBy: apiMessage.read_by || [],
     images: apiMessage.images || [],
-    status: 'delivered',
+    status: apiMessage.status || 'delivered',
   };
 };
 
@@ -106,7 +130,7 @@ const uploadImageToStorage = async (imagePath: string, chatId: string): Promise<
       'chats',
       chatId,
       undefined,
-      (progress) => console.log(`上传进度: ${progress}%`)
+      (progress: number) => console.log(`上传进度: ${progress}%`)
     );
 
     return path;
@@ -138,7 +162,7 @@ export interface ChatStore extends ChatState {
   addWebSocketMessage: (message: ChatMessage) => void;
   joinChatRooms: (chatIds: string[]) => void;
   processNextPendingMessage: () => Promise<void>;
-  updateMessageStatus: (messageId: string, chatId: string, status: string) => void;
+  updateMessageStatus: (messageId: string, chatId: string, status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed') => void;
   setConnectionStatus: (status: 'connected' | 'connecting' | 'reconnecting' | 'disconnected') => void;
 }
 
@@ -154,7 +178,7 @@ export const useChatStore = create<ChatStore>()(
       pendingMessages: [],
 
       // 设置连接状态
-      setConnectionStatus: (status) => {
+      setConnectionStatus: (status: 'connected' | 'connecting' | 'reconnecting' | 'disconnected') => {
         set({ connectionStatus: status });
       },
 
@@ -162,7 +186,7 @@ export const useChatStore = create<ChatStore>()(
         set({ isLoading: true, error: null });
         try {
           // 调用API获取聊天列表
-          const response = await ApiService.get('/auth/chats');
+          const response = await ApiService.get<ApiResponse<ChatListResponse>>('/auth/chats');
 
           // 检查响应是否成功
           if (response.code !== 0) {
@@ -170,12 +194,12 @@ export const useChatStore = create<ChatStore>()(
           }
 
           // 转换API数据格式
-          const chats = response.data.chats.map(convertApiChatToChat);
+          const chats = response.data.chats.map((apiChat: any) => convertApiChatToChat(apiChat));
 
           set({ chats, isLoading: false });
 
           // 加入所有聊天室的WebSocket
-          const chatIds = chats.map(chat => chat.id);
+          const chatIds = chats.map((chat: Chat) => chat.id);
 
           // 确保WebSocket连接
           if (!WebSocketService.isConnected()) {
@@ -194,7 +218,7 @@ export const useChatStore = create<ChatStore>()(
         set({ isLoading: true, error: null });
         try {
           // 调用API获取单个聊天详情
-          const response = await ApiService.get(`/auth/chats/${id}`);
+          const response = await ApiService.get<ApiResponse<ChatDetailResponse>>(`/auth/chats/${id}`);
 
           if (response.code !== 0) {
             throw new Error(response.message || "获取聊天详情失败");
@@ -222,14 +246,14 @@ export const useChatStore = create<ChatStore>()(
         set({ isLoading: true, error: null });
         try {
           // 调用API获取消息历史
-          const response = await ApiService.get(`/auth/chats/${chatId}/messages`);
+          const response = await ApiService.get<ApiResponse<ChatMessagesResponse>>(`/auth/chats/${chatId}/messages`);
 
           if (response.code !== 0) {
             throw new Error(response.message || "获取消息失败");
           }
 
           // 转换API消息格式
-          const messages = response.data.messages.map(convertApiMessageToMessage);
+          const messages = response.data.messages.map((apiMessage: any) => convertApiMessageToMessage(apiMessage));
 
           // 更新消息
           const updatedMessages = { ...get().messages };
@@ -246,7 +270,7 @@ export const useChatStore = create<ChatStore>()(
         }
       },
 
-      sendMessage: async ({ content, chatId, images, retryMessageId }) => {
+      sendMessage: async ({ content, chatId, images, retryMessageId }: CreateMessagePayload & { retryMessageId?: string }) => {
         try {
           const user = useAuthStore.getState().user;
 
@@ -284,7 +308,7 @@ export const useChatStore = create<ChatStore>()(
           if (images && images.length > 0) {
             try {
               // 上传所有图片
-              const uploadPromises = images.map(img => uploadImageToStorage(img, chatId));
+              const uploadPromises = images.map((img: string) => uploadImageToStorage(img, chatId));
               uploadedImages = await Promise.all(uploadPromises);
             } catch (uploadError) {
               console.error("上传图片失败:", uploadError);
@@ -319,7 +343,7 @@ export const useChatStore = create<ChatStore>()(
 
             // 更新聊天的最后一条消息和未读数
             const currentChats = [...get().chats];
-            const chatIndex = currentChats.findIndex(c => c.id === chatId);
+            const chatIndex = currentChats.findIndex((c: Chat) => c.id === chatId);
 
             if (chatIndex !== -1) {
               currentChats[chatIndex] = {
@@ -367,12 +391,12 @@ export const useChatStore = create<ChatStore>()(
       },
 
       // 更新消息状态的辅助方法
-      updateMessageStatus: (messageId, chatId, status) => {
+      updateMessageStatus: (messageId: string, chatId: string, status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed') => {
         const { messages } = get();
         const chatMessages = messages[chatId] || [];
 
         // 查找消息
-        const messageIndex = chatMessages.findIndex(m => m.id === messageId);
+        const messageIndex = chatMessages.findIndex((m: Message) => m.id === messageId);
         if (messageIndex === -1) return;
 
         // 创建更新后的消息列表
@@ -392,7 +416,7 @@ export const useChatStore = create<ChatStore>()(
 
         // 同时更新聊天列表中的最后一条消息
         const chats = [...get().chats];
-        const chatIndex = chats.findIndex(c => c.id === chatId);
+        const chatIndex = chats.findIndex((c: Chat) => c.id === chatId);
 
         if (chatIndex !== -1 && chats[chatIndex].lastMessage?.id === messageId) {
           chats[chatIndex] = {
@@ -420,7 +444,7 @@ export const useChatStore = create<ChatStore>()(
           if (!chatData.isGroup && chatData.participants.length === 1) {
             const otherUserId = chatData.participants[0];
             const existingChat = get().chats.find(
-              c => !c.isGroup && c.participants.some(p => p.id === otherUserId)
+              (c: Chat) => !c.isGroup && c.participants.some((p: UserProfile) => p.id === otherUserId)
             );
 
             if (existingChat) {
@@ -438,7 +462,7 @@ export const useChatStore = create<ChatStore>()(
           };
 
           // 调用API创建聊天
-          const response = await ApiService.post('/auth/chats', apiChatData);
+          const response = await ApiService.post<ApiResponse<ChatCreateResponse>>('/auth/chats', apiChatData);
 
           if (response.code !== 0) {
             throw new Error(response.message || "创建聊天失败");
@@ -485,7 +509,7 @@ export const useChatStore = create<ChatStore>()(
 
           // 更新本地状态
           const currentChats = [...get().chats];
-          const chatIndex = currentChats.findIndex(c => c.id === chatId);
+          const chatIndex = currentChats.findIndex((c: Chat) => c.id === chatId);
 
           if (chatIndex !== -1) {
             currentChats[chatIndex] = {
@@ -497,7 +521,7 @@ export const useChatStore = create<ChatStore>()(
           // 更新消息的已读状态
           const currentMessages = { ...get().messages };
           if (currentMessages[chatId]) {
-            currentMessages[chatId] = currentMessages[chatId].map(message => {
+            currentMessages[chatId] = currentMessages[chatId].map((message: Message) => {
               if (!message.readBy.includes(user.id)) {
                 return {
                   ...message,
@@ -528,7 +552,7 @@ export const useChatStore = create<ChatStore>()(
           if (settings.isMuted !== undefined) apiSettings.is_muted = settings.isMuted;
 
           // 调用API更新聊天设置
-          const response = await ApiService.put(`/auth/chats/${chatId}/settings`, apiSettings);
+          const response = await ApiService.put<ApiResponse<{ success: boolean }>>(`/auth/chats/${chatId}/settings`, apiSettings);
 
           if (response.code !== 0) {
             throw new Error(response.message || "更新聊天设置失败");
@@ -536,7 +560,7 @@ export const useChatStore = create<ChatStore>()(
 
           // 更新本地状态
           const currentChats = [...get().chats];
-          const chatIndex = currentChats.findIndex(c => c.id === chatId);
+          const chatIndex = currentChats.findIndex((c: Chat) => c.id === chatId);
 
           if (chatIndex !== -1) {
             currentChats[chatIndex] = {
@@ -596,12 +620,12 @@ export const useChatStore = create<ChatStore>()(
         const updatedMessages = { ...messages };
 
         // 避免重复消息
-        if (!chatMessages.some(msg => msg.id === appMessage.id)) {
+        if (!chatMessages.some((msg: Message) => msg.id === appMessage.id)) {
           updatedMessages[chatId] = [...chatMessages, appMessage];
         }
 
         // 更新聊天列表
-        const chatIndex = chats.findIndex(c => c.id === chatId);
+        const chatIndex = chats.findIndex((c: Chat) => c.id === chatId);
         let updatedChats = [...chats];
 
         if (chatIndex !== -1) {
@@ -634,7 +658,7 @@ export const useChatStore = create<ChatStore>()(
         const currentUserId = useAuthStore.getState().user?.id;
         if (message.user_id === currentUserId) {
           // 在用户发送的临时消息中查找与此消息内容匹配的项
-          const tempMessageIndex = chatMessages.findIndex(msg =>
+          const tempMessageIndex = chatMessages.findIndex((msg: Message) =>
             msg.senderId === currentUserId &&
             msg.status === 'sending' &&
             msg.content === message.message
@@ -708,23 +732,23 @@ export const useChatStore = create<ChatStore>()(
       }
     }),
     {
-      name: 'chat-storage',
+      name: 'chat-store',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         chats: state.chats,
         // 仅持久化状态不是'failed'的消息
         messages: Object.entries(state.messages).reduce((acc, [chatId, msgs]) => {
-          acc[chatId] = msgs.filter(m => m.status !== 'failed');
+          acc[chatId] = msgs.filter((m: Message) => m.status !== 'failed');
           return acc;
         }, {} as Record<string, Message[]>),
-        pendingMessages: state.pendingMessages.filter(m => m.status !== 'failed'),
+        pendingMessages: state.pendingMessages.filter((m: Message) => m.status !== 'failed'),
       }),
     }
   )
 );
 
 // 监听WebSocket连接状态变化
-WebSocketService.onConnectionStatusChange((status) => {
+WebSocketService.onConnectionStatusChange((status: string) => {
   const chatStore = useChatStore.getState();
 
   switch (status) {
@@ -750,7 +774,7 @@ WebSocketService.onConnectionStatusChange((status) => {
 });
 
 // 监听WebSocket消息
-WebSocketService.onMessage((message) => {
+WebSocketService.onMessage((message: ChatMessage) => {
   const chatStore = useChatStore.getState();
   chatStore.addWebSocketMessage(message);
 });

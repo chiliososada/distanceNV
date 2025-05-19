@@ -9,6 +9,7 @@ export interface Message {
   createdAt: string;
   readBy: string[];
   images?: string[];
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed'; // 添加状态字段
 }
 
 export interface Chat {
