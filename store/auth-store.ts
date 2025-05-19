@@ -82,6 +82,7 @@ export const useAuthStore = create<AuthStore>()(
       checkSession: async () => {
         try {
           const response = await ApiService.checkSession();
+          console.error("checkSession:", response.data);
           const isValid = response.code === 0 && response.data.uid !== '';
 
           if (!isValid) {

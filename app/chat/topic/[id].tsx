@@ -70,14 +70,14 @@ export default function TopicChatScreen() {
       }
 
       // 4. 创建聊天 - 使用非空断言或默认值
-      const chatId = await createChat({
-        isGroup: true,
-        name: `Discussion: ${currentTopic.title || "聊天室"}`,
-        participants: [currentTopic.authorId || ""],
-        topicId: currentTopic.id,
-        ...(expiresAt ? { expiresAt } : {})
-      });
-
+      // const chatId = await createChat({
+      //   isGroup: true,
+      //   name: `Discussion: ${currentTopic.title || "聊天室"}`,
+      //   participants: [currentTopic.authorId || ""],
+      //   topicId: currentTopic.id,
+      //   ...(expiresAt ? { expiresAt } : {})
+      // });
+      const chatId = currentTopic.chatId
       // 5. 本地存储 - 使用JSON.stringify的安全处理
       try {
         await AsyncStorage.setItem(

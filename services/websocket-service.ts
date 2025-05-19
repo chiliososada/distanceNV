@@ -111,6 +111,7 @@ class WebSocketService {
 
                     // 发送验证消息
                     if (this.ws && this.session) {
+                        console.log(this.session.chat_token);
                         try {
                             this.ws.send(JSON.stringify({
                                 "type": "Validate",
