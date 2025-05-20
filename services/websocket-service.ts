@@ -1,5 +1,5 @@
 // services/websocket-service.ts
-import { nanoid } from 'nanoid';
+import { nanoid } from 'nanoid/non-secure'; // 使用non-secure版本，不依赖crypto
 import { useChatStore } from '@/store/chat-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import EventEmitter from '@/utils/event-emitter';
@@ -9,7 +9,7 @@ export interface ChatMessage {
     message: string;
     message_id: string;
     chat_id: string;
-    user_id: string;
+    user_id?: string;
     at: string;
     nickname?: string;
     avatar_url?: string;
@@ -279,7 +279,8 @@ class WebSocketService {
                         this.connectingPromise = null;
                     }
 
-                    this.attemptReconnect();
+                    // this.attemptReconnect(); // 已注释掉重连
+                    console.log('WebSocket连接已关闭，不进行自动重连');
                 };
             } catch (error) {
                 if (timeoutId !== null) {
@@ -379,7 +380,8 @@ class WebSocketService {
         this.closeConnection();
         this.isReconnecting = true;
         this.triggerConnectionStatusChange('reconnecting');
-        this.connectAsync();
+        // this.connectAsync();
+        console.log('手动重连功能已禁用');
     }
 
     // 处理待发送消息
@@ -441,27 +443,32 @@ class WebSocketService {
             this.reconnectTimeout = null;
         }
 
+        /*
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.log('已达到最大重连次数，停止重连');
             this.notifyConnectionLost();
             return;
         }
-
+    
         this.reconnectAttempts++;
         this.isReconnecting = true;
-
+    
         // 使用指数退避算法计算延迟
         const baseDelay = this.reconnectDelay;
         const exponentialDelay = baseDelay * Math.pow(1.5, this.reconnectAttempts - 1);
         const maxDelay = 30000; // 最大30秒
         const delay = Math.min(exponentialDelay, maxDelay);
-
+    
         console.log(`将在 ${delay}ms 后尝试重新连接 (尝试 ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-
+    
         this.reconnectTimeout = setTimeout(() => {
             console.log('尝试重新连接...');
             this.connectAsync();
         }, delay) as unknown as number;
+        */
+
+        console.log('自动重连功能已禁用');
+        this.notifyConnectionLost();
     }
 
     // 通知连接已丢失
@@ -481,12 +488,13 @@ class WebSocketService {
     // 检查连接并重连
     public async checkAndReconnect(): Promise<boolean> {
         if (this.connectionState !== 'connected') {
-            console.log('检测到WebSocket未连接，尝试重新连接...');
+            console.log('检测到WebSocket未连接，重连功能已禁用');
+            /*
             if (this.session) {
                 return await this.connectAsync();
             } else {
                 console.error('无法重连：缺少会话信息');
-
+    
                 // 尝试从AsyncStorage恢复会话
                 try {
                     const storedSession = await AsyncStorage.getItem('websocket-session');
@@ -497,9 +505,9 @@ class WebSocketService {
                 } catch (error) {
                     console.error('恢复会话失败:', error);
                 }
-
-                return false;
             }
+            */
+            return false;
         }
         return true;
     }
@@ -510,7 +518,8 @@ class WebSocketService {
         if (this.connectionState !== 'connected' || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
             console.log('WebSocket未就绪，将消息加入待发送队列');
             this.pendingMessages.push({ message, chatId, imgUrl });
-            this.checkAndReconnect();
+            console.log('自动重连功能已禁用，消息将在下次连接时发送');
+            // this.checkAndReconnect();
             return;
         }
 
@@ -526,9 +535,9 @@ class WebSocketService {
                 "message": message,
                 "message_id": nanoid(),
                 "chat_id": chatId,
-                "user_id": this.session.uid,
-                "nickname": this.session.display_name,
-                "avatar_url": this.session.photo_url,
+                //"user_id": this.session.uid,
+                // "nickname": this.session.display_name,
+                //  "avatar_url": this.session.photo_url,
                 "at": new Date().toISOString()
             };
 
@@ -549,7 +558,8 @@ class WebSocketService {
         } catch (error) {
             console.error('发送消息失败:', error);
             this.pendingMessages.push({ message, chatId, imgUrl });
-            this.reconnect();
+            // this.reconnect(); // 已注释掉重连
+            console.log('自动重连功能已禁用，消息将在下次连接时发送');
         }
     }
 

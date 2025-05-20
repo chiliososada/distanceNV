@@ -300,9 +300,6 @@ export const useChatStore = create<ChatStore>()(
             console.log('WebSocket连接状态:', connected ? '已连接' : '连接失败');
           }
 
-          // 加入聊天室
-          const joined = await WebSocketService.joinChat(id);
-          console.log('加入聊天室状态:', joined ? '成功' : '失败');
 
           // 获取或初始化消息
           const chatMessages = get().messages[id] || [];
