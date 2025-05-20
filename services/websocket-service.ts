@@ -52,8 +52,9 @@ class WebSocketService {
     private pendingMessages: Array<{ chatId: string, message: string, imgUrl?: string }> = [];
     private pendingChats: Set<string> = new Set();
     private connectionState: ConnectionStatus = 'disconnected';
-    private heartbeatInterval: number | null = null;
-    private lastPingTime = 0;
+    // 注释掉心跳检测相关变量
+    // private heartbeatInterval: number | null = null;
+    // private lastPingTime = 0;
     private connectionStatusListeners: ConnectionStatusListener[] = [];
     private messageListeners: MessageListener[] = [];
     private isReconnecting = false;
@@ -209,13 +210,13 @@ class WebSocketService {
                             // 重置重连尝试
                             this.reconnectAttempts = 0;
 
-                            // 开始心跳检测
-                            //   this.startHeartbeat();
+                            // 注释掉心跳检测启动
+                            // this.startHeartbeat();
                             resolve(true);
 
-                            // 处理等待的消息和聊天室
-                            //  this.processPendingMessages();
-                            //  this.processPendingChats();
+                            // 注释掉处理待处理消息和聊天室
+                            // this.processPendingMessages();
+                            // this.processPendingChats();
                         } catch (sendError) {
                             console.error('发送验证消息失败:', sendError);
                             this.triggerConnectionStatusChange('disconnected');
@@ -230,11 +231,12 @@ class WebSocketService {
                     try {
                         const data = JSON.parse(event.data);
 
-                        // 处理心跳响应
-                        if (data.type === 'Pong') {
-                            this.handlePong();
-                            return;
-                        }
+                        // 注释掉心跳响应处理
+                        // // 处理心跳响应
+                        // if (data.type === 'Pong') {
+                        //     this.handlePong();
+                        //     return;
+                        // }
 
                         console.log('收到WebSocket消息:', data);
 
@@ -266,7 +268,8 @@ class WebSocketService {
 
                     console.log(`WebSocket连接关闭: ${event.code} ${event.reason}`);
                     this.triggerConnectionStatusChange('disconnected');
-                    this.stopHeartbeat();
+                    // 注释掉停止心跳检测
+                    // this.stopHeartbeat();
 
                     if (this.connectingPromise) {
                         resolve(false);
@@ -312,6 +315,8 @@ class WebSocketService {
         }
     }
 
+    // 注释掉心跳检测相关方法
+    /*
     // 启动心跳检测
     private startHeartbeat(): void {
         this.stopHeartbeat();
@@ -355,6 +360,7 @@ class WebSocketService {
         // 更新最后响应时间
         this.lastPingTime = Date.now();
     }
+    */
 
     // 兼容旧API的connect方法
     public connect(chatIds?: string[]): void {
@@ -373,8 +379,10 @@ class WebSocketService {
         this.connectAsync();
     }
 
-    // 处理待发送的消息队列
+    // 保留但注释掉方法体内部的处理逻辑
     private processPendingMessages(): void {
+        // 已注释掉，保留方法结构以便将来恢复
+        /*
         if (this.pendingMessages.length > 0 &&
             this.ws &&
             this.ws.readyState === WebSocket.OPEN) {
@@ -399,10 +407,13 @@ class WebSocketService {
                 }
             });
         }
+        */
     }
 
-    // 处理待加入的聊天室
+    // 保留但注释掉方法体内部的处理逻辑
     private processPendingChats(): void {
+        // 已注释掉，保留方法结构以便将来恢复
+        /*
         if (this.pendingChats.size > 0 &&
             this.ws &&
             this.ws.readyState === WebSocket.OPEN) {
@@ -423,6 +434,7 @@ class WebSocketService {
                 chatIds.forEach(id => this.pendingChats.add(id));
             }
         }
+        */
     }
 
     // 尝试重新连接 - 使用指数退避策略
@@ -529,7 +541,6 @@ class WebSocketService {
     // 加入聊天室
     public async joinChat(chatId: string): Promise<boolean> {
         return this.joinChats([chatId]);
-        //return true;
     }
 
     // 加入多个聊天室
@@ -614,7 +625,8 @@ class WebSocketService {
     public disconnect(): void {
         console.log('断开WebSocket连接');
 
-        this.stopHeartbeat();
+        // 注释掉心跳停止
+        // this.stopHeartbeat();
 
         if (this.reconnectTimeout) {
             clearTimeout(this.reconnectTimeout);

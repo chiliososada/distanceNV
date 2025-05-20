@@ -225,7 +225,6 @@ export default function ChatScreen() {
   };
 
   // 仅在初始加载时显示加载指示器
-  // isLoading && !chat
   if (isLoading && !chat) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -247,7 +246,7 @@ export default function ChatScreen() {
       </SafeAreaView>
     );
   }
-  //!chat
+
   if (!chat) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
@@ -256,8 +255,10 @@ export default function ChatScreen() {
     );
   }
 
-  //const otherUser = 
-  // chat.participants.find((p: any) => p.id !== user?.id);
+  // 获取真实消息，而不是使用硬编码的假数据
+  const chatMessages = messages[id] || [];
+
+  // 模拟其他用户信息，实际应用中应从聊天对象的participants中获取
   const otherUser = {
     id: "other-user",
     type: 'person' as 'person',
@@ -275,81 +276,6 @@ export default function ChatScreen() {
     isOnline: true
   };
 
-  //const chatMessages = messages[chat.id] || [];
-  const chatMessages = [
-    {
-      id: "msg-1",
-      content: "你好，我是其他用户",
-      senderId: "other-user",
-      sender: {
-        id: "other-user",
-        type: "person",
-        email: "other@example.com",
-        username: "otheruser",
-        displayName: "其他用户",
-        avatar: "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        followersCount: 5,
-        followingCount: 2,
-        topicsCount: 1,
-        likesCount: 8,
-        lastActiveAt: new Date().toISOString()
-      },
-      chatId: "chat-123",
-      createdAt: new Date().toISOString(),
-      readBy: ["current-user"],
-      status: "read"
-    },
-    {
-      id: "msg-2",
-      content: "有空，我们几点见？",
-      senderId: "current-user",
-      sender: {
-        id: "current-user",
-        type: "person",
-        email: "me@example.com",
-        username: "me",
-        displayName: "当前用户",
-        avatar: "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        followersCount: 0,
-        followingCount: 0,
-        topicsCount: 0,
-        likesCount: 0,
-        lastActiveAt: new Date().toISOString()
-      },
-      chatId: "chat-123",
-      createdAt: new Date().toISOString(),
-      readBy: ["other-user"],
-      status: "sent"
-    },
-    {
-      id: "msg-3",
-      content: "下午三点怎么样？",
-      senderId: "other-user",
-      sender: {
-        id: "other-user",
-        type: "person",
-        email: "other@example.com",
-        username: "otheruser",
-        displayName: "其他用户",
-        avatar: "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        followersCount: 5,
-        followingCount: 2,
-        topicsCount: 1,
-        likesCount: 8,
-        lastActiveAt: new Date().toISOString()
-      },
-      chatId: "chat-123",
-      createdAt: new Date().toISOString(),
-      readBy: [],
-      status: "delivered"
-    }
-  ];
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <StatusBar style="dark" />
