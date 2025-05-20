@@ -28,29 +28,6 @@ type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnec
 type ConnectionStatusListener = (status: ConnectionStatus) => void;
 type MessageListener = (message: ChatMessage) => void;
 
-const parseChatMessage = (data: any): ChatMessage => {
-    if (!data || typeof data !== 'object') {
-        throw new Error('无效的消息格式');
-    }
-
-    // 确保必要字段存在
-    if (!data.chat_id || !data.message_id) {
-        throw new Error('消息缺少必要字段');
-    }
-
-    // 返回标准化的消息对象
-    return {
-        type: data.type || 'Chat',
-        message: data.message || '',
-        message_id: data.message_id,
-        chat_id: data.chat_id,
-        user_id: data.user_id || '',
-        at: data.at || new Date().toISOString(),
-        nickname: data.nickname || '未知用户', // 处理可能不存在的昵称
-        avatar_url: data.avatar_url || '', // 处理可能不存在的头像
-        img_url: data.img_url || undefined // 处理可能存在的图片
-    };
-};
 
 class WebSocketService {
     private static instance: WebSocketService;
@@ -99,13 +76,29 @@ class WebSocketService {
         this.messageListeners.push(listener);
         console.log('添加消息监听器, 当前监听器数量:', this.messageListeners.length);
 
-        // 返回解除监听的函数
+        // 立即返回解除监听的函数
         return () => {
+            console.log('移除消息监听器');
             this.messageListeners = this.messageListeners.filter(l => l !== listener);
+            console.log('移除后监听器数量:', this.messageListeners.length);
         };
     }
 
 
+    private createChatMessage(data: any): ChatMessage {
+        // 返回一个格式标准的消息对象
+        return {
+            type: data.type || 'Chat',
+            message: data.message || '',
+            message_id: data.message_id,
+            chat_id: data.chat_id,
+            user_id: data.user_id || '',
+            at: data.at || new Date().toISOString(),
+            nickname: data.nickname || '',
+            avatar_url: data.avatar_url || '',
+            img_url: data.img_url
+        };
+    }
 
     // 触发状态变化
     private triggerConnectionStatusChange(status: ConnectionStatus): void {
@@ -121,9 +114,11 @@ class WebSocketService {
 
     // 触发消息接收
     private triggerMessageReceived(message: ChatMessage): void {
+        console.log('触发消息接收事件, 监听器数量:', this.messageListeners.length);
         this.messageListeners.forEach(listener => {
             try {
                 listener(message);
+                console.log('消息监听器已执行');
             } catch (e) {
                 console.error('消息监听器异常:', e);
             }
@@ -244,26 +239,22 @@ class WebSocketService {
 
                 this.ws.onmessage = (event) => {
                     try {
+                        console.log('收到原始WebSocket消息:', event.data);
                         const data = JSON.parse(event.data);
-
-                        // 注释掉心跳响应处理
-                        // // 处理心跳响应
-                        // if (data.type === 'Pong') {
-                        //     this.handlePong();
-                        //     return;
-                        // }
-
-                        console.log('收到WebSocket消息:', data);
+                        console.log('解析后的WebSocket消息:', data);
 
                         // 处理聊天消息
                         if (data.type === 'Chat') {
-                            const message = parseChatMessage(data);
+                            console.log('识别到Chat类型消息, 开始处理');
+                            const message = this.createChatMessage(data);
+                            console.log('准备触发消息监听器, 当前监听器数量:', this.messageListeners.length);
                             this.triggerMessageReceived(message);
                         }
                     } catch (error) {
-                        console.error('处理WebSocket消息出错:', error);
+                        console.error('处理WebSocket消息出错:', error, '原始数据:', event.data);
                     }
                 };
+
 
                 this.ws.onerror = (error) => {
                     if (timeoutId !== null) {
