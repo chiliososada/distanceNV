@@ -397,42 +397,42 @@ export const useChatStore = create<ChatStore>()(
 
           // 如果是重试，使用现有的临时消息
           // 如果不是重试，创建新的临时消息
-          if (!retryMessageId) {
-            // 1. 乐观更新UI - 先在本地添加临时消息
-            const tempMessage: Message = {
-              id: messageId,
-              content: content || "",
-              senderId: user.id,
-              sender: user,
-              chatId,
-              createdAt: new Date().toISOString(),
-              readBy: [user.id],
-              images: uploadedImages.length > 0 ? uploadedImages : undefined,
-              status: 'sending'
-            };
+          // if (!retryMessageId) {
+          //   // 1. 乐观更新UI - 先在本地添加临时消息
+          //   const tempMessage: Message = {
+          //     id: messageId,
+          //     content: content || "",
+          //     senderId: user.id,
+          //     sender: user,
+          //     chatId,
+          //     createdAt: new Date().toISOString(),
+          //     readBy: [user.id],
+          //     images: uploadedImages.length > 0 ? uploadedImages : undefined,
+          //     status: 'sending'
+          //   };
 
-            // 更新本地状态
-            const currentMessages = { ...get().messages };
-            const chatMessages = currentMessages[chatId] || [];
-            currentMessages[chatId] = [...chatMessages, tempMessage];
+          //   // 更新本地状态
+          //   const currentMessages = { ...get().messages };
+          //   const chatMessages = currentMessages[chatId] || [];
+          //   currentMessages[chatId] = [...chatMessages, tempMessage];
 
-            // 更新聊天的最后一条消息和未读数
-            const currentChats = [...get().chats];
-            const chatIndex = currentChats.findIndex((c: Chat) => c.id === chatId);
+          //   // 更新聊天的最后一条消息和未读数
+          //   const currentChats = [...get().chats];
+          //   const chatIndex = currentChats.findIndex((c: Chat) => c.id === chatId);
 
-            if (chatIndex !== -1) {
-              currentChats[chatIndex] = {
-                ...currentChats[chatIndex],
-                lastMessage: tempMessage,
-                updatedAt: new Date().toISOString(),
-              };
-            }
+          //   if (chatIndex !== -1) {
+          //     currentChats[chatIndex] = {
+          //       ...currentChats[chatIndex],
+          //       lastMessage: tempMessage,
+          //       updatedAt: new Date().toISOString(),
+          //     };
+          //   }
 
-            set({
-              messages: currentMessages,
-              chats: currentChats
-            });
-          }
+          //   set({
+          //     messages: currentMessages,
+          //     chats: currentChats
+          //   });
+          // }
 
           // 2. 通过WebSocket发送消息
           if (content) {
@@ -449,17 +449,17 @@ export const useChatStore = create<ChatStore>()(
           }
 
           // 4. 更新消息状态为已发送
-          get().updateMessageStatus(messageId, chatId, 'sent');
+          // get().updateMessageStatus(messageId, chatId, 'sent');
 
         } catch (error: any) {
           console.error("发送消息失败:", error);
 
-          // 更新消息状态为发送失败
-          if (retryMessageId) {
-            get().updateMessageStatus(retryMessageId, chatId, 'failed');
-          } else {
-            get().updateMessageStatus(`temp-${Date.now()}`, chatId, 'failed');
-          }
+          // // 更新消息状态为发送失败
+          // if (retryMessageId) {
+          //   get().updateMessageStatus(retryMessageId, chatId, 'failed');
+          // } else {
+          //   get().updateMessageStatus(`temp-${Date.now()}`, chatId, 'failed');
+          // }
 
           throw error;
         }
@@ -676,12 +676,12 @@ export const useChatStore = create<ChatStore>()(
         const appMessage: Message = {
           id: message.message_id,
           content: message.message,
-          senderId: message.user_id,
+          senderId: message.user_id!,
           sender: {
-            id: message.user_id,
+            id: message.user_id!,
             type: 'person',
             email: '',
-            username: message.user_id,
+            username: message.user_id!,
             displayName: message.nickname || '未知用户',
             avatar: message.avatar_url,
             createdAt: new Date().toISOString(),
@@ -694,7 +694,7 @@ export const useChatStore = create<ChatStore>()(
           },
           chatId: message.chat_id,
           createdAt: message.at,
-          readBy: [message.user_id],
+          readBy: [message.user_id ?? 'unknown_user'],
           // 使用服务器支持的图片字段，可能是image_url而非img_url
           images: undefined,
           status: isFromCurrentUser ? 'sent' : 'delivered'

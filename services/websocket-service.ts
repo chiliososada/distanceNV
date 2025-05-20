@@ -553,7 +553,7 @@ class WebSocketService {
 
             // 这一步很关键：手动触发本地消息事件，确保即使服务器不响应也能看到消息
             // 这相当于模拟收到了自己发送的消息
-            this.triggerMessageReceived(messageData);
+            // this.triggerMessageReceived(messageData);
 
         } catch (error) {
             console.error('发送消息失败:', error);
