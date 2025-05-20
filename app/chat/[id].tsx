@@ -64,27 +64,24 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (id) {
-      // 查找缓存中的聊天
-      const chatData = chats.find(c => c.id === id);
-      if (chatData) {
-        setChat(chatData);
+      // 不从API获取聊天，而是创建一个基本对象
+      const basicChat = {
+        id: id,
+        name: "聊天",
+        isGroup: true,
+        participants: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        unreadCount: 0
+      };
+      setChat(basicChat);
 
-        // 仅在首次加载时获取消息
-        if (!initialFetchDoneRef.current && (!messages[id] || messages[id].length === 0)) {
-          fetchMessages(id);
-          initialFetchDoneRef.current = true;
-        }
-
-        // 标记聊天为已读
-        if (!markAsReadDoneRef.current && chatData.unreadCount > 0) {
-          markChatAsRead(id);
-          markAsReadDoneRef.current = true;
-        }
-      } else {
-        fetchChatById(id);
+      // 尝试获取消息，如果有的话
+      if (!messages[id] || messages[id].length === 0) {
+        fetchMessages(id);
       }
     }
-  }, [id, chats]);
+  }, [id]);
 
   // 监听消息变化
   useEffect(() => {
@@ -114,22 +111,16 @@ export default function ChatScreen() {
   }, [connectionStatus]);
 
   const handleSend = async () => {
-    //if ((!messageText.trim() && !selectedImage) || !user || !chat) return;
+    if ((!messageText.trim() && !selectedImage) || !user) return;
 
     try {
       setIsSending(true);
 
-
-
-      // 使用统一的发送消息方法
       await sendMessage({
         content: messageText.trim(),
-        chatId: "66dcb853-0ef3-4c50-8839-ac299ba704c6",
+        chatId: id, // 使用URL参数中的chatId，而不是硬编码值
         images: selectedImage ? [selectedImage] : undefined
       });
-
-
-
 
       // 清空输入框和选中的图片
       setMessageText('');
@@ -233,8 +224,9 @@ export default function ChatScreen() {
     }
   };
 
-  // 仅在初始加载时显示加载指示器isLoading && !chat
-  if (false) {
+  // 仅在初始加载时显示加载指示器
+  // isLoading && !chat
+  if (isLoading && !chat) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -256,7 +248,7 @@ export default function ChatScreen() {
     );
   }
   //!chat
-  if (false) {
+  if (!chat) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -264,7 +256,8 @@ export default function ChatScreen() {
     );
   }
 
-  //const otherUser = chat.participants.find((p: any) => p.id !== user?.id);
+  //const otherUser = 
+  // chat.participants.find((p: any) => p.id !== user?.id);
   const otherUser = {
     id: "other-user",
     type: 'person' as 'person',
