@@ -33,11 +33,23 @@ const parseChatMessage = (data: any): ChatMessage => {
         throw new Error('无效的消息格式');
     }
 
+    // 确保必要字段存在
     if (!data.chat_id || !data.message_id) {
         throw new Error('消息缺少必要字段');
     }
 
-    return data as ChatMessage;
+    // 返回标准化的消息对象
+    return {
+        type: data.type || 'Chat',
+        message: data.message || '',
+        message_id: data.message_id,
+        chat_id: data.chat_id,
+        user_id: data.user_id || '',
+        at: data.at || new Date().toISOString(),
+        nickname: data.nickname || '未知用户', // 处理可能不存在的昵称
+        avatar_url: data.avatar_url || '', // 处理可能不存在的头像
+        img_url: data.img_url || undefined // 处理可能存在的图片
+    };
 };
 
 class WebSocketService {

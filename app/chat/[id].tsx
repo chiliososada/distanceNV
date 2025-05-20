@@ -91,6 +91,10 @@ export default function ChatScreen() {
       const chatMessages = messages[id] || [];
       console.log(`ChatScreen: 聊天室 ${id} 消息数量:`, chatMessages.length);
 
+      if (chatMessages.length > 0) {
+        console.log('最新消息:', chatMessages[chatMessages.length - 1]);
+      }
+
       // 即使没有 chat 对象，也设置消息
       if (chatMessages.length > 0) {
         if (!chat) {
@@ -133,44 +137,12 @@ export default function ChatScreen() {
     }
   }, [connectionStatus]);
 
-  // 在 app/chat/[id].tsx 的 handleSend 函数中
   const handleSend = async () => {
     if ((!messageText.trim() && !selectedImage) || !user) return;
 
     try {
       setIsSending(true);
       console.log('发送消息:', messageText, '到聊天室:', id);
-
-      // 临时消息ID，用于本地显示
-      const tempMessageId = `temp-${Date.now()}`;
-
-      // 首先在本地添加临时消息，以提供即时反馈
-      const tempMessage: Message = {
-        id: tempMessageId,
-        content: messageText.trim(),
-        senderId: user.id,
-        sender: user,
-        chatId: id,
-        createdAt: new Date().toISOString(),
-        readBy: [user.id],
-        images: selectedImage ? [selectedImage] : undefined,
-        status: 'sending'
-      };
-
-      // 更新本地消息列表
-      const currentMessages = messages[id] || [];
-      const updatedMessages = { ...messages };
-      updatedMessages[id] = [...currentMessages, tempMessage];
-
-      // 设置状态，确保UI立即显示消息
-      useChatStore.setState({
-        messages: updatedMessages
-      });
-
-      // 滚动到底部
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
 
       // 使用WebSocket服务发送消息
       await sendMessage({
@@ -307,8 +279,9 @@ export default function ChatScreen() {
     );
   }
 
-  // 获取真实消息，而不是使用硬编码的假数据
+  // 获取真实消息
   const chatMessages = messages[id] || [];
+  console.log(`渲染聊天室 ${id} 的 ${chatMessages.length} 条消息`);
 
   // 模拟其他用户信息，实际应用中应从聊天对象的participants中获取
   const otherUser = {
@@ -394,8 +367,8 @@ export default function ChatScreen() {
               message={item}
               isOwnMessage={item.senderId === user?.id}
               showAvatar={true}
-              avatar={item.senderId === user?.id ? user?.avatar : otherUser?.avatar}
-              name={item.senderId === user?.id ? user?.displayName : otherUser?.displayName}
+              avatar={item.sender?.avatar || ''}
+              name={item.sender?.displayName || '其他用户'}
               onImagePress={handleImagePress}
               status={item.status}
               onResend={() => {
@@ -416,8 +389,10 @@ export default function ChatScreen() {
               flatListRef.current?.scrollToEnd({ animated: false });
             }
           }}
-          // 确保列表在消息变化时更新
           extraData={chatMessages.length}
+          onContentSizeChange={() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }}
         />
 
         {/* 选中的图片预览 */}
