@@ -85,12 +85,15 @@ class WebSocketService {
     // 添加消息监听器
     public onMessage(listener: MessageListener): () => void {
         this.messageListeners.push(listener);
+        console.log('添加消息监听器, 当前监听器数量:', this.messageListeners.length);
 
         // 返回解除监听的函数
         return () => {
             this.messageListeners = this.messageListeners.filter(l => l !== listener);
         };
     }
+
+
 
     // 触发状态变化
     private triggerConnectionStatusChange(status: ConnectionStatus): void {
@@ -215,8 +218,8 @@ class WebSocketService {
                             resolve(true);
 
                             // 注释掉处理待处理消息和聊天室
-                            // this.processPendingMessages();
-                            // this.processPendingChats();
+                            this.processPendingMessages();
+                            this.processPendingChats();
                         } catch (sendError) {
                             console.error('发送验证消息失败:', sendError);
                             this.triggerConnectionStatusChange('disconnected');
@@ -379,10 +382,8 @@ class WebSocketService {
         this.connectAsync();
     }
 
-    // 保留但注释掉方法体内部的处理逻辑
+    // 处理待发送消息
     private processPendingMessages(): void {
-        // 已注释掉，保留方法结构以便将来恢复
-        /*
         if (this.pendingMessages.length > 0 &&
             this.ws &&
             this.ws.readyState === WebSocket.OPEN) {
@@ -407,13 +408,10 @@ class WebSocketService {
                 }
             });
         }
-        */
     }
 
-    // 保留但注释掉方法体内部的处理逻辑
+    // 处理待加入的聊天室
     private processPendingChats(): void {
-        // 已注释掉，保留方法结构以便将来恢复
-        /*
         if (this.pendingChats.size > 0 &&
             this.ws &&
             this.ws.readyState === WebSocket.OPEN) {
@@ -434,7 +432,6 @@ class WebSocketService {
                 chatIds.forEach(id => this.pendingChats.add(id));
             }
         }
-        */
     }
 
     // 尝试重新连接 - 使用指数退避策略
@@ -508,6 +505,7 @@ class WebSocketService {
     }
 
     // 发送消息
+    // 修改 websocket-service.ts 中的 sendMessage 方法
     public sendMessage(message: string, chatId: string, imgUrl?: string): void {
         if (this.connectionState !== 'connected' || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
             console.log('WebSocket未就绪，将消息加入待发送队列');
@@ -522,17 +520,34 @@ class WebSocketService {
         }
 
         try {
-            this.ws.send(JSON.stringify({
+            // 创建消息对象
+            const messageData = {
                 "type": "Chat",
                 "message": message,
                 "message_id": nanoid(),
                 "chat_id": chatId,
-                "at": new Date().toISOString(),
-                // "img_url": imgUrl 需要修改
-            }));
+                "user_id": this.session.uid,
+                "nickname": this.session.display_name,
+                "avatar_url": this.session.photo_url,
+                "at": new Date().toISOString()
+            };
+
+            // 如果有图片URL，添加对应字段
+            if (imgUrl) {
+                // 根据后端接受的字段进行修改，假设后端使用 image_url
+                //   messageData["image_url"] = imgUrl;
+            }
+
+            // 实际发送消息到服务器
+            this.ws.send(JSON.stringify(messageData));
+            console.log('WebSocket消息已发送:', messageData);
+
+            // 这一步很关键：手动触发本地消息事件，确保即使服务器不响应也能看到消息
+            // 这相当于模拟收到了自己发送的消息
+            this.triggerMessageReceived(messageData);
+
         } catch (error) {
             console.error('发送消息失败:', error);
-            // 如果发送失败，可能是连接状态问题，添加到待发送队列
             this.pendingMessages.push({ message, chatId, imgUrl });
             this.reconnect();
         }

@@ -64,37 +64,60 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (id) {
-      // 不从API获取聊天，而是创建一个基本对象
-      const basicChat = {
-        id: id,
-        name: "聊天",
-        isGroup: true,
-        participants: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        unreadCount: 0
-      };
-      setChat(basicChat);
+      console.log(`ChatScreen: 加载聊天室 ${id}`);
+      fetchChatById(id).then(() => {
+        console.log('聊天室加载完成');
 
-      // 尝试获取消息，如果有的话
-      if (!messages[id] || messages[id].length === 0) {
-        fetchMessages(id);
-      }
+        // 如果聊天数据已加载，但消息为空，也设置基本聊天对象
+        if (!chat) {
+          const basicChat = {
+            id: id,
+            name: "聊天室",
+            isGroup: true,
+            participants: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            unreadCount: 0
+          };
+          setChat(basicChat);
+        }
+      });
     }
   }, [id]);
 
-  // 监听消息变化
+  // 关键：监听消息变化，确保UI更新
   useEffect(() => {
-    if (id && messages[id] && chat) {
-      setChat({
-        ...chat,
-        messages: messages[id] || []
-      });
+    if (id) {
+      const chatMessages = messages[id] || [];
+      console.log(`ChatScreen: 聊天室 ${id} 消息数量:`, chatMessages.length);
 
-      // 当新消息到达时自动滚动到底部
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      // 即使没有 chat 对象，也设置消息
+      if (chatMessages.length > 0) {
+        if (!chat) {
+          const basicChat = {
+            id: id,
+            name: "聊天室",
+            isGroup: true,
+            participants: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            unreadCount: 0,
+            messages: chatMessages
+          };
+          setChat(basicChat);
+        } else {
+          // 更新现有聊天的消息
+          setChat({
+            ...chat,
+            messages: chatMessages
+          });
+        }
+
+        // 滚动到底部
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     }
   }, [id, messages]);
 
@@ -110,26 +133,55 @@ export default function ChatScreen() {
     }
   }, [connectionStatus]);
 
+  // 在 app/chat/[id].tsx 的 handleSend 函数中
   const handleSend = async () => {
     if ((!messageText.trim() && !selectedImage) || !user) return;
 
     try {
       setIsSending(true);
+      console.log('发送消息:', messageText, '到聊天室:', id);
 
+      // 临时消息ID，用于本地显示
+      const tempMessageId = `temp-${Date.now()}`;
+
+      // 首先在本地添加临时消息，以提供即时反馈
+      const tempMessage: Message = {
+        id: tempMessageId,
+        content: messageText.trim(),
+        senderId: user.id,
+        sender: user,
+        chatId: id,
+        createdAt: new Date().toISOString(),
+        readBy: [user.id],
+        images: selectedImage ? [selectedImage] : undefined,
+        status: 'sending'
+      };
+
+      // 更新本地消息列表
+      const currentMessages = messages[id] || [];
+      const updatedMessages = { ...messages };
+      updatedMessages[id] = [...currentMessages, tempMessage];
+
+      // 设置状态，确保UI立即显示消息
+      useChatStore.setState({
+        messages: updatedMessages
+      });
+
+      // 滚动到底部
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // 使用WebSocket服务发送消息
       await sendMessage({
         content: messageText.trim(),
-        chatId: id, // 使用URL参数中的chatId，而不是硬编码值
+        chatId: id,
         images: selectedImage ? [selectedImage] : undefined
       });
 
       // 清空输入框和选中的图片
       setMessageText('');
       setSelectedImage(null);
-
-      // 滚动到底部
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
     } catch (error) {
       console.error('发送消息失败:', error);
       Alert.alert('发送失败', '消息发送失败，请稍后重试');

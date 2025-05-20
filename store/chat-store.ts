@@ -244,42 +244,82 @@ export const useChatStore = create<ChatStore>()(
       fetchChatById: async (id: string) => {
         set({ isLoading: true, error: null });
         try {
-          // 使用模拟数据，添加类型断言
-          const mockChat: Chat = {
-            id: id,
-            name: "测试聊天室",
-            isGroup: true,
-            participants: [
-              {
-                id: useAuthStore.getState().user?.id || "current-user",
-                type: 'person' as 'person', // 添加类型断言，确保类型是字面量类型而非string
-                email: 'test@example.com',
-                username: 'testuser',
-                displayName: '当前用户',
-                avatar: '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                followersCount: 0,
-                followingCount: 0,
-                topicsCount: 0,
-                likesCount: 0,         // 添加缺少的必要属性
-                lastActiveAt: new Date().toISOString() // 添加缺少的必要属性
-              }
-            ],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            unreadCount: 0
-          };
+          // 首先检查已有聊天列表中是否存在该聊天
+          const existingChat = get().chats.find(chat => chat.id === id);
+          const currentUser = useAuthStore.getState().user;
 
-          set({ currentChat: mockChat, isLoading: false });
+          if (existingChat) {
+            // 如果已存在，直接使用
+            set({ currentChat: existingChat, isLoading: false });
+          } else {
+            // 使用模拟数据创建新聊天
+            console.log('创建模拟聊天:', id);
 
-          // 尝试建立WebSocket连接，但即使失败也能继续
-          WebSocketService.joinChat(id);
+            // 创建一个包含当前用户的模拟聊天
+            const mockChat: Chat = {
+              id: id,
+              name: "聊天室 " + id.substring(0, 5),
+              isGroup: true,
+              participants: currentUser ? [
+                {
+                  id: currentUser.id,
+                  type: 'person',
+                  email: currentUser.email,
+                  username: currentUser.username,
+                  displayName: currentUser.displayName,
+                  avatar: currentUser.avatar,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  followersCount: 0,
+                  followingCount: 0,
+                  topicsCount: 0,
+                  likesCount: 0,
+                  lastActiveAt: new Date().toISOString()
+                }
+              ] : [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              unreadCount: 0
+            };
+
+            // 更新聊天列表和当前聊天
+            const updatedChats = [...get().chats, mockChat];
+            set({
+              chats: updatedChats,
+              currentChat: mockChat,
+              isLoading: false
+            });
+
+            console.log('模拟聊天创建完成:', mockChat);
+          }
+
+          // 确保WebSocket连接并加入聊天室
+          console.log('尝试连接WebSocket并加入聊天室:', id);
+          if (!WebSocketService.isConnected()) {
+            const connected = await WebSocketService.connectAsync();
+            console.log('WebSocket连接状态:', connected ? '已连接' : '连接失败');
+          }
+
+          // 加入聊天室
+          const joined = await WebSocketService.joinChat(id);
+          console.log('加入聊天室状态:', joined ? '成功' : '失败');
+
+          // 获取或初始化消息
+          const chatMessages = get().messages[id] || [];
+          if (chatMessages.length === 0) {
+            console.log('初始化空聊天记录');
+            // 初始化一个空的消息列表
+            const updatedMessages = { ...get().messages };
+            updatedMessages[id] = [];
+            set({ messages: updatedMessages });
+          }
+
         } catch (error: any) {
-          console.error("获取聊天详情失败:", error);
-          set({ error: error.message || "获取聊天详情失败", isLoading: false });
+          console.error("模拟聊天创建失败:", error);
+          set({ error: error.message || "创建聊天失败", isLoading: false });
         }
       },
+
       fetchMessages: async (chatId: string) => {
         set({ isLoading: true, error: null });
         try {
@@ -618,6 +658,9 @@ export const useChatStore = create<ChatStore>()(
 
       // WebSocket相关方法
       addWebSocketMessage: (message: ChatMessage) => {
+        // 记录日志
+        console.log('处理收到的WebSocket消息:', message);
+
         // 确保消息对象格式正确
         if (!message.message_id || !message.chat_id) {
           console.error('消息缺少必要字段', message);
@@ -626,6 +669,11 @@ export const useChatStore = create<ChatStore>()(
 
         const { messages, chats } = get();
         const chatId = message.chat_id;
+        const currentUserId = useAuthStore.getState().user?.id;
+
+        // 检测是否是自己发送的消息
+        const isFromCurrentUser = message.user_id === currentUserId;
+        console.log('是否是自己的消息:', isFromCurrentUser, 'currentUserId:', currentUserId);
 
         // 转换WebSocket消息为应用消息格式
         const appMessage: Message = {
@@ -644,46 +692,101 @@ export const useChatStore = create<ChatStore>()(
             followersCount: 0,
             followingCount: 0,
             topicsCount: 0,
+            likesCount: 0,
+            lastActiveAt: new Date().toISOString(),
           },
           chatId: message.chat_id,
           createdAt: message.at,
           readBy: [message.user_id],
-          // 如果消息中包含图片URL
-          images: message.img_url ? [message.img_url] : undefined,
-          status: 'delivered'
+          // 使用服务器支持的图片字段，可能是image_url而非img_url
+          images: undefined,
+          status: isFromCurrentUser ? 'sent' : 'delivered'
         };
 
         // 更新消息列表
         const chatMessages = messages[chatId] || [];
         const updatedMessages = { ...messages };
 
-        // 避免重复消息
+        // 检查是否已存在相同消息(根据id判断)
         if (!chatMessages.some((msg: Message) => msg.id === appMessage.id)) {
+          console.log('添加新消息到聊天室:', chatId);
           updatedMessages[chatId] = [...chatMessages, appMessage];
+        } else {
+          console.log('消息已存在，不重复添加');
+          // 可能需要更新消息状态
+          const existingMsgIndex = chatMessages.findIndex((msg: Message) => msg.id === appMessage.id);
+          if (existingMsgIndex !== -1) {
+            const updatedChatMessages = [...chatMessages];
+            updatedChatMessages[existingMsgIndex] = {
+              ...updatedChatMessages[existingMsgIndex],
+              status: isFromCurrentUser ? 'sent' : 'delivered',
+            };
+            updatedMessages[chatId] = updatedChatMessages;
+          }
         }
 
         // 更新聊天列表
-        const chatIndex = chats.findIndex((c: Chat) => c.id === chatId);
         let updatedChats = [...chats];
+        const chatIndex = chats.findIndex((c: Chat) => c.id === chatId);
 
         if (chatIndex !== -1) {
           // 更新现有聊天
-          const currentUserId = useAuthStore.getState().user?.id;
-          const isFromCurrentUser = message.user_id === currentUserId;
-
           updatedChats[chatIndex] = {
             ...updatedChats[chatIndex],
             lastMessage: appMessage,
             updatedAt: new Date().toISOString(),
-            unreadCount: isFromCurrentUser
-              ? updatedChats[chatIndex].unreadCount
-              : updatedChats[chatIndex].unreadCount + 1
+            unreadCount: isFromCurrentUser ?
+              updatedChats[chatIndex].unreadCount :
+              updatedChats[chatIndex].unreadCount + 1
           };
         } else {
-          // 聊天不在列表中，可能需要获取聊天信息
-          console.log('收到未知聊天室的消息:', chatId);
-          // 可选：获取新聊天信息
-          get().fetchChatById(chatId).catch(console.error);
+          // 聊天不在列表中，创建新聊天
+          console.log('创建新聊天:', chatId);
+          const newChat: Chat = {
+            id: chatId,
+            name: `聊天室 ${chatId.substring(0, 5)}`,
+            isGroup: true,
+            participants: [
+              // 添加当前用户
+              currentUserId ? {
+                id: currentUserId,
+                type: 'person',
+                email: '',
+                username: currentUserId,
+                displayName: useAuthStore.getState().user?.displayName || '当前用户',
+                avatar: useAuthStore.getState().user?.avatar,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                followersCount: 0,
+                followingCount: 0,
+                topicsCount: 0,
+                likesCount: 0,
+                lastActiveAt: new Date().toISOString(),
+              } : null,
+              // 添加消息发送者(如果不是当前用户)
+              !isFromCurrentUser ? {
+                id: message.user_id,
+                type: 'person',
+                email: '',
+                username: message.user_id,
+                displayName: message.nickname || '其他用户',
+                avatar: message.avatar_url,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                followersCount: 0,
+                followingCount: 0,
+                topicsCount: 0,
+                likesCount: 0,
+                lastActiveAt: new Date().toISOString(),
+              } : null
+            ].filter(Boolean) as any[], // 过滤掉null值
+            lastMessage: appMessage,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            unreadCount: isFromCurrentUser ? 0 : 1
+          };
+
+          updatedChats = [...updatedChats, newChat];
         }
 
         // 更新状态
@@ -692,50 +795,7 @@ export const useChatStore = create<ChatStore>()(
           chats: updatedChats
         });
 
-        // 处理当前用户发送的消息确认
-        const currentUserId = useAuthStore.getState().user?.id;
-        if (message.user_id === currentUserId) {
-          // 在用户发送的临时消息中查找与此消息内容匹配的项
-          const tempMessageIndex = chatMessages.findIndex((msg: Message) =>
-            msg.senderId === currentUserId &&
-            msg.status === 'sending' &&
-            msg.content === message.message
-          );
-
-          if (tempMessageIndex !== -1) {
-            // 找到临时消息，将其ID和状态更新为真实消息ID和已发送状态
-            const tempId = chatMessages[tempMessageIndex].id;
-
-            // 创建新的消息数组，替换旧的临时消息
-            const newChatMessages = [...chatMessages];
-            newChatMessages[tempMessageIndex] = {
-              ...newChatMessages[tempMessageIndex],
-              id: message.message_id,
-              status: 'delivered',
-              createdAt: message.at
-            };
-
-            updatedMessages[chatId] = newChatMessages;
-
-            // 如果需要更新最后一条消息
-            if (updatedChats[chatIndex]?.lastMessage?.id === tempId) {
-              updatedChats[chatIndex] = {
-                ...updatedChats[chatIndex],
-                lastMessage: {
-                  ...updatedChats[chatIndex].lastMessage!,
-                  id: message.message_id,
-                  status: 'delivered',
-                  createdAt: message.at
-                }
-              };
-            }
-
-            set({
-              messages: updatedMessages,
-              chats: updatedChats
-            });
-          }
-        }
+        console.log('消息处理完成，聊天状态已更新');
       },
 
       joinChatRooms: (chatIds: string[]) => {
@@ -788,31 +848,20 @@ export const useChatStore = create<ChatStore>()(
 // 监听WebSocket连接状态变化
 WebSocketService.onConnectionStatusChange((status: string) => {
   const chatStore = useChatStore.getState();
+  console.log('WebSocket连接状态变化:', status);
 
-  switch (status) {
-    case 'connected':
-      chatStore.setConnectionStatus('connected');
+  chatStore.setConnectionStatus(status as any);
 
-      // 处理待发送的消息
-      chatStore.processNextPendingMessage();
-      break;
-
-    case 'connecting':
-      chatStore.setConnectionStatus('connecting');
-      break;
-
-    case 'reconnecting':
-      chatStore.setConnectionStatus('reconnecting');
-      break;
-
-    case 'disconnected':
-      chatStore.setConnectionStatus('disconnected');
-      break;
+  // 连接成功时处理待发送消息
+  if (status === 'connected') {
+    console.log('WebSocket已连接，处理待发送消息');
+    chatStore.processNextPendingMessage();
   }
 });
 
 // 监听WebSocket消息
 WebSocketService.onMessage((message: ChatMessage) => {
+  console.log('收到WebSocket消息:', message);
   const chatStore = useChatStore.getState();
   chatStore.addWebSocketMessage(message);
 });
