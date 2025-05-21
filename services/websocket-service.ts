@@ -406,14 +406,14 @@ class WebSocketService {
 
             // 手动触发本地消息事件，确保即使服务器不响应也能看到消息
             // 这段代码很重要，如果服务器不及时响应，用户仍然可以看到自己的消息
-            const localMessage: ChatMessage = {
-                ...messageData,
-                user_id: this.session.uid,
-                nickname: this.session.display_name,
-                avatar_url: this.session.photo_url,
-                img_url: imgUrl
-            };
-            this.triggerMessageReceived(localMessage);
+            // const localMessage: ChatMessage = {
+            //     ...messageData,
+            //     user_id: this.session.uid,
+            //     nickname: this.session.display_name,
+            //     avatar_url: this.session.photo_url,
+            //     img_url: imgUrl
+            // };
+            // this.triggerMessageReceived(localMessage);
 
         } catch (error) {
             console.error('发送消息失败:', error);
